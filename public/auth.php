@@ -1,30 +1,38 @@
 <?php
     session_start();
     require_once '../config/db.php';
+    $loginUrl = 'http://localhost:8080/atlasware_api/users/login';
 
     if($_SERVER["REQUEST_METHOD"] == "POST"){
         $login = trim($_POST['login']);
         $senha = trim($_POST['senha']);
 
-        $sql = "SELECT id, nome, senha FROM usuarios WHERE login = :login LIMIT 1";
-        $stmt = $pdo->prepare($sql);
-        $stmt->bindParam(':login', $login);
-        $stmt->execute();
+        $data = [
+            "login" => $login,
+            "senha" => $senha
+        ];
 
-        if($stmt->rowCount() == 1){
-            $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
+        $ch = curl_init($loginUrl);
 
-            if(password_verify($senha, $usuario['senha'])){
-                $_SESSION['usuario_id'] = $usuario['id'];
-                header("Location: index.php");
-                exit();
-            } else {
-                $erro = "Senha incorreta.";
-                echo $erro;
-            }
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        $result = json_decode($response, true);
+
+        if (isset($result['ERROR'])) {
+            // Ação no caso de erro
+            echo "<div class='alert alert-danger'>" . htmlspecialchars($result['ERROR']) . "</div>";
         } else {
-            $erro = "Usuário não encontrado.";
-                echo $erro;
+            // Ação no caso de sucesso
+            echo "<div class='alert alert-success'>". htmlspecialchars($result['SUCCESS']) ."</div>";
+            $_SESSION['usuario_id'] = $result['USER_ID'];
+            $_SESSION['usuario_nome'] = $result['USER_NAME'];
+            header("Location: index.php");
+            exit();
         }
     }
 ?>
@@ -84,10 +92,6 @@
             </div>
 
             <form action="auth.php" method="POST">
-
-                <?php if(isset($erro)): ?>
-                    <div class="alert alert-danger" role="alert"><?php echo $erro; ?></div>
-                <?php endif; ?>
 
                 <div class="mb-3">
                     <label for="login" class="form-label">Usuário</label>
