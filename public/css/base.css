@@ -1,0 +1,101 @@
+/* base.css */
+
+/* Reset básico (menos agressivo) */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+/* Variáveis CSS para cores */
+:root {
+    --blue-royal-dark: #1e40af;
+    --blue-royal: #2563eb;
+    --blue-royal-light: #3b82f6;
+
+    --gray-dark: #374151;
+    --gray-medium: #6b7280;
+    --gray-light: #cbd5e1;
+    --gray-lighter: #f8f9fa;
+
+    --red-light: #fee2e2;
+    --red-dark: #b91c1c;
+
+    --green-light: #dcfce7;
+    --green-dark: #166534;
+
+    --yellow-light: #fef3c7;
+    --yellow-dark: #92400e;
+}
+
+/* Altura total */
+html, body {
+    height: 100%;
+}
+
+/* Deixa o Bootstrap comandar o layout, só garante fonte e fundo padrão */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, var(--blue-royal-dark), var(--blue-royal));
+    color: var(--gray-dark);
+}
+
+/* Títulos */
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 700;
+    color: #ffffff;
+}
+
+/* Mensagens de erro e sucesso */
+.error-message {
+    background-color: var(--red-light);
+    color: var(--red-dark);
+    padding: 10px 15px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    font-weight: 600;
+    text-align: left;
+}
+
+.success-message {
+    background-color: var(--green-light);
+    color: var(--green-dark);
+    padding: 10px 15px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    font-weight: 600;
+    text-align: left;
+}
+
+.warning-message {
+    background-color: var(--yellow-light);
+    color: var(--yellow-dark);
+    padding: 10px 15px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    font-weight: 600;
+    text-align: left;
+}
+
+/* Fundo em degradê azul (para usar em outras páginas se quiser) */
+.bg-gradient-atlas {
+    background: linear-gradient(135deg, #1b4dd8, #1750f5);
+}
+
+/* Centralização vertical opcional para páginas específicas */
+.full-height-center {
+    min-height: calc(100vh - 56px); /* ~ altura da navbar */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+html {
+    background: transparent;
+}
+
+main {
+    background: transparent;
+}

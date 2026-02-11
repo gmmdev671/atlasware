@@ -1,0 +1,80 @@
+/* login.css */
+
+/* Card do login */
+.login-container {
+    background-color: #ffffff;
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+}
+
+/* Título */
+.login-container h2 {
+    margin-bottom: 30px;
+    color: var(--blue-royal-dark);
+    font-weight: 700;
+    font-size: 1.8rem;
+    text-align: center;
+}
+
+/* Formulário */
+.login-container form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Labels */
+.login-container label {
+    font-weight: 600;
+    color: var(--gray-dark);
+    margin-bottom: 6px;
+    display: block;
+}
+
+/* Inputs */
+.login-container input[type="text"],
+.login-container input[type="password"] {
+    width: 100%;
+    padding: 12px 15px;
+    border: 2px solid var(--gray-light);
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.3s ease;
+}
+
+.login-container input[type="text"]:focus,
+.login-container input[type="password"]:focus {
+    outline: none;
+    border-color: var(--blue-royal);
+    box-shadow: 0 0 6px rgba(37, 99, 235, 0.5);
+}
+
+/* Botão */
+.login-container button {
+    width: 100%;
+    background-color: var(--blue-royal);
+    color: white;
+    padding: 14px 0;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.login-container button:hover {
+    background-color: var(--blue-royal-dark);
+}
+
+/* Responsividade */
+@media (max-width: 576px) {
+    .login-container {
+        padding: 30px 25px;
+        max-width: 90%;
+    }
+}

@@ -1,0 +1,66 @@
+/* public/css/audit.css */
+
+/* Ajuste de contraste para o cabeçalho sobre o fundo azul */
+.audit-header h1 {
+    color: #ffffff !important;
+    font-weight: 700;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.audit-header p {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Botão Atualizar com melhor visibilidade */
+.btn-refresh {
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    color: #ffffff !important;
+    transition: all 0.3s;
+}
+
+.btn-refresh:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-color: #ffffff;
+    color: #ffffff !important;
+}
+
+/* Arredondamento do bloco central branco */
+.audit-card {
+    border-radius: 15px !important;
+    overflow: hidden;
+    border: none !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15) !important;
+}
+
+/* Ajuste dos títulos da tabela */
+.audit-card thead th {
+    background-color: #f8f9fa;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    border-bottom: 2px solid #dee2e6;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+}
+
+/* Estilo para os blocos de código JSON nos modais */
+.json-preview {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+}
+
+.json-preview {
+    max-height: 300px;
+    overflow-y: auto;
+    font-family: 'Courier New', Courier, monospace;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}

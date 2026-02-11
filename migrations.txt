@@ -1,0 +1,8 @@
+ALTER TABLE tb_user_teams
+  ADD CONSTRAINT fk_ut_user FOREIGN KEY (user_id) REFERENCES tb_users(id) ON DELETE CASCADE,
+  ADD CONSTRAINT fk_ut_team FOREIGN KEY (team_id) REFERENCES tb_teams(id) ON DELETE CASCADE,
+  ADD CONSTRAINT fk_ut_role FOREIGN KEY (role_id) REFERENCES tb_roles(id) ON DELETE RESTRICT;
+
+  CREATE INDEX idx_ut_team ON tb_user_teams(team_id);
+CREATE INDEX idx_ut_user ON tb_user_teams(user_id);
+CREATE INDEX idx_roles_level ON tb_roles(level);

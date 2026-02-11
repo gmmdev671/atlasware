@@ -1,0 +1,215 @@
+/* ============================================================
+   access.css - Global styles (sem regras espec�edficas do organograma)
+   Substitua todo o arquivo antigo por este.
+   ============================================================ */
+
+:root{
+    --primary: #3b82f6;
+    --primary-dark: #6366f1;
+    --muted: #64748b;
+    --bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --line-color: #6366f1;
+    --line-accent: #3a64ec;
+
+    /* Valores auxiliares (padr�e3o) - o organograma pode sobrescrever se necess�e1rio */
+    --conn-gap: 20px;
+    --conn-margin: 6px;
+}
+
+/* ---------------------------
+   Global / Wrapper / Typography
+   --------------------------- */
+.access-page {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #333;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    box-sizing: border-box;
+}
+
+.access-page * { box-sizing: inherit; }
+
+.access-page h1 {
+    color: var(--primary-dark);
+    margin-bottom: 20px;
+}
+
+/* Links */
+.access-page a { color: var(--primary); text-decoration: none; }
+.access-page a:hover { text-decoration: underline; }
+
+/* Error */
+.access-page .error-message {
+    background-color: #fee2e2;
+    color: #b91c1c;
+    padding: 10px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+}
+
+/* ---------------------------
+   Forms
+   --------------------------- */
+.access-page form label { display:block; margin-top:15px; font-weight:600; }
+
+.access-page form input[type="text"],
+.access-page form input[type="number"],
+.access-page form select,
+.access-page form textarea {
+    width: 100%;
+    max-width: 420px;
+    padding: 8px;
+    border: 2px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 1rem;
+    background: white;
+}
+
+/* ---------------------------
+   Tables & Action Buttons
+   --------------------------- */
+.access-page table { border-collapse: collapse; width:100%; }
+.access-page table th,
+.access-page table td {
+    border: 1px solid #cbd5e1;
+    padding: 10px;
+    text-align: left;
+    vertical-align: middle;
+}
+
+/* Action buttons */
+.action-btn {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:90px;
+    height:32px;
+    padding:0 !important;
+    font-size:0.85rem;
+    line-height:1;
+    border-radius:6px;
+    vertical-align:middle;
+}
+
+/* Generic small inline buttons used in cards */
+.btn-info-inline, .btn-edit-inline, .btn-details-inline {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    padding:4px 8px;
+    border-radius:6px;
+    cursor:pointer;
+    font-size:0.8rem;
+    border:1px solid #cbd5e1;
+    background:#f1f5f9;
+    color:var(--muted);
+}
+
+/* Generic small inline buttons used in cards */
+.btn-info-inline {
+    margin-left: 15px;
+}
+
+.btn-info-inline:hover, .btn-details-inline:hover, .btn-edit-inline:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    transform: scale(1.02);
+}
+
+/* ---------------------------
+   Corre�e7�f5es e utilit�e1rios (globais)
+   --------------------------- */
+/* Animation helpers */
+.user-card, .sub-container { transition: all .18s ease; }
+
+/* Modais - mantidos aqui */
+.custom-modal {
+    position: fixed;
+    top:0; left:0; width:100vw; height:100vh;
+    z-index:9999; display:flex; align-items:center; justify-content:center;
+}
+.modal-overlay { position:absolute; inset:0; background:rgba(0,0,0,.6); backdrop-filter: blur(2px); }
+.modal-content-custom {
+    position:relative;
+    background: var(--card-bg);
+    border-radius:12px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.3);
+    width:90%; max-width:520px; z-index:10000; padding:0;
+    animation: modalFadeIn .28s ease;
+}
+@keyframes modalFadeIn { from{opacity:0; transform:translateY(-10px)} to{opacity:1; transform:none} }
+
+.modal-header-custom { padding:20px 25px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center; }
+.modal-body-custom { padding:25px; color:var(--muted); }
+.modal-footer-custom { padding:15px 25px; border-top:1px solid #e5e7eb; display:flex; justify-content:flex-end; gap:10px; }
+
+/* ---------------------------
+   Grid Permiss�f5es (card + global)
+   --------------------------- */
+.permissions-grid {
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap:10px;
+    max-height:400px;
+    overflow-y:auto;
+    padding:5px;
+}
+.permission-item {
+    display:flex; align-items:center; gap:10px;
+    padding:10px; background:var(--card-bg); border:1px solid #e2e8f0; border-radius:8px;
+}
+.permission-item input[type="checkbox"] { width:18px; height:18px; }
+
+/* Permissions grid in card (compact) */
+.permissions-grid-card {
+    display: flex;
+    flex-direction: column; /* Lista vertical é melhor para leitura em colunas estreitas */
+    gap: 5px;
+ }
+ 
+.permission-item-card { font-size:.75rem; padding:6px 8px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; color:#166534; text-align:center; }
+@media (max-width:1200px) { .permissions-grid-card { grid-template-columns: repeat(4,1fr); } }
+@media (max-width:768px) { .permissions-grid-card { grid-template-columns: 1fr; } }
+
+/* ---------------------------
+   Tabs compactas para detalhes
+   --------------------------- */
+.nav-tabs-compact {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+    flex-direction: row !important;
+}
+
+.nav-tabs-compact::-webkit-scrollbar {
+    height: 6px;                /* Altura da barra de rolagem */
+}
+
+.nav-tabs-compact::-webkit-scrollbar-thumb {
+    background-color: rgba(0,0,0,0.2);
+    border-radius: 3px;
+}
+
+.nav-tabs-compact .nav-link {
+    font-size: 0.75rem;
+    padding: 6px 10px;
+    color: var(--muted);
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    white-space: nowrap;       /* Impede quebra do texto da tab */
+    flex-shrink: 0;            /* Impede que as tabs encolham */
+}
+
+.nav-tabs-compact .nav-link.active {
+    color: var(--primary-dark);
+    border-bottom-color: var(--primary-dark);
+    font-weight: 600;
+}
