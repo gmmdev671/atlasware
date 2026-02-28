@@ -362,6 +362,14 @@ if ($method === 'GET' && $path === '/admin/organograma/user-details') {
     exit;
 }
 
+// === AJAX: Buscar árvore do organograma por status ===
+if ($method === 'GET' && $path === '/admin/organograma/fetch-tree') {
+    $status = $_GET['status'] ?? 'active';
+    $controller = new AccessController();
+    $controller->fetchOrganogramaTree($status);
+    exit;
+}
+
 // POST: Ativar permissões
 if ($method === 'POST' && ($path === '/admin/access-details/activatePermissions' || $path === '/admin/organograma/activate-permissions')) {
     AccessDetailsController::activatePermissions();
@@ -441,6 +449,13 @@ if ($method === 'GET' && ($path === '/admin/tabs/ajaxList' || $path === '/admin/
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }
+    exit;
+}
+
+// === AJAX: Buscar subárvore a partir de um líder específico ===
+if ($method === 'GET' && $path === '/admin/organograma/fetch-leader-tree') {
+    $controller = new AccessController();
+    $controller->fetchOrganogramaTreeFromLeader();
     exit;
 }
 

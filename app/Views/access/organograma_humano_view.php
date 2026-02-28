@@ -1,121 +1,7 @@
-<?php
-function renderUserNode($users, $allUsers = []) {
-    if (empty($users) || !is_array($users)) return;
-
-    echo '<ul>';
-
-    foreach ($users as $user) {
-        $id = isset($user['id']) ? (int)$user['id'] : 0;
-        $name = isset($user['nome']) ? $user['nome'] : ($user['name'] ?? 'Sem Nome');
-        $isActive = (isset($user['status']) && $user['status'] == 0);
-        $cardClass = $isActive ? '' : 'opacity-50 border-danger';
-        $hasSub = !empty($user['subordinates']) && is_array($user['subordinates']);
-        $firstName = htmlspecialchars(explode(' ', trim($name))[0] ?? $name, ENT_QUOTES, 'UTF-8');
-        $fullNameEsc = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
-
-        // id do sub-container (para aria-controls)
-        $subId = 'sub-container-' . $id;
-
-        // li (adiciona has-sub se houver subordinados)
-        echo '<li class="user-node ' . ($hasSub ? 'has-sub' : '') . '" data-user-id="' . $id . '">';
-
-            // wrapper do card + trigger (sempre presente)
-            echo '<div class="user-card-wrapper">';
-
-                // Card principal
-                echo '<div class="user-card ' . $cardClass . '" data-user-id="' . $id . '">';
-
-                    // Header do card (nome + ações)
-                    echo '<div class="card-header-user">';
-                        echo '<span class="user-first-name ml-3">' . $firstName . '</span>';
-
-                        echo '<div class="user-actions-wrapper">';
-                            // Botão Ver (info)
-                            echo '<button class="btn-info-inline" title="Ver detalhes" onclick="event.stopPropagation(); window.location.href=\'' . BASE_PATH . '/admin/users/' . $id . '\'">';
-                                echo '<i class="bi bi-info-circle" aria-hidden="true"></i>';
-                            echo '</button>';
-
-                            // Botão detalhes (expande o card interno)
-                            echo '<button class="btn-details-inline" title="Expandir detalhes" onclick="event.stopPropagation(); toggleCardExpand(' . $id . ');">';
-                                echo '<i class="bi bi-list-ul" aria-hidden="true"></i>';
-                            echo '</button>';
-
-                            // Botão editar/permissões
-                            echo '<button class="btn-edit-inline" title="Ver permissões" onclick="event.stopPropagation(); openPermissionsModal(' . $id . ', \'' . addslashes($name) . '\');">';
-                                echo '<i class="bi bi-pencil" aria-hidden="true"></i>';
-                            echo '</button>';
-                        echo '</div>'; // .user-actions-wrapper
-
-                    echo '</div>'; // .card-header-user
-
-                    // Container de detalhes (inicialmente escondido)
-                    echo '<div class="card-details-container" id="card-details-' . $id . '" style="display:none;">';
-
-                        // Inner wrapper que vira duas colunas quando o card está expandido
-                        echo '<div class="card-details-inner">';
-
-                            // NAV vertical (left)
-                            echo '<nav class="nav flex-column nav-tabs-vertical vertical-tabs" role="tablist" aria-orientation="vertical">';
-                                echo '<a class="nav-link active" data-bs-toggle="tab" href="#tab-resumo-' . $id . '">Resumo</a>';
-                                echo '<a class="nav-link" data-bs-toggle="tab" href="#tab-obras-' . $id . '">Contratos</a>';
-                                echo '<a class="nav-link" data-bs-toggle="tab" href="#tab-cidades-' . $id . '">Obras</a>';
-                                echo '<a class="nav-link" data-bs-toggle="tab" href="#tab-abas-' . $id . '">Acessos</a>';
-                                echo '<a class="nav-link" data-bs-toggle="tab" href="#tab-permissoes-' . $id . '">Permissões</a>';
-                            echo '</nav>';
-
-                            // Conteúdo à direita
-                            echo '<div class="tab-content tab-content-compact vertical-tab-content">';
-                                echo '<div class="tab-pane fade show active" id="tab-resumo-' . $id . '">';
-                                    echo '<div class="details-content" data-content="resumo" data-user-id="' . $id . '">Carregando...</div>';
-                                echo '</div>';
-                                echo '<div class="tab-pane fade" id="tab-obras-' . $id . '">';
-                                    echo '<div class="details-content" data-content="obras" data-user-id="' . $id . '">Carregando...</div>';
-                                echo '</div>';
-                                echo '<div class="tab-pane fade" id="tab-cidades-' . $id . '">';
-                                    echo '<div class="details-content" data-content="cidades" data-user-id="' . $id . '">Carregando...</div>';
-                                echo '</div>';
-                                echo '<div class="tab-pane fade" id="tab-abas-' . $id . '">';
-                                    echo '<div class="details-content" data-content="abas" data-user-id="' . $id . '">Carregando...</div>';
-                                echo '</div>';
-                                echo '<div class="tab-pane fade" id="tab-permissoes-' . $id . '">';
-                                    echo '<div class="details-content" data-content="permissoes" data-user-id="' . $id . '">Carregando...</div>';
-                                echo '</div>';
-                            echo '</div>'; // .tab-content
-
-                        echo '</div>'; // .card-details-inner
-
-                    echo '</div>'; // .card-details-container
-
-                echo '</div>'; // .user-card
-
-                // Expand-trigger — sempre renderizado (botão quando tem filhos; placeholder invisível caso contrário)
-                if ($hasSub) {
-                    echo '<button type="button" class="expand-trigger" aria-expanded="true" onclick="event.stopPropagation(); toggleSub(this);">';
-                        echo '<i class="bi bi-chevron-right toggle-icon"></i>';
-                    echo '</button>';
-                } else {
-                    // O placeholder DEVE ter a classe expand-trigger para herdar o tamanho de 30px
-                    echo '<span class="expand-trigger empty-expand-trigger"></span>';
-                }
-
-            echo '</div>'; // .user-card-wrapper
-
-            // Sub-container (coluna de filhos) - somente se houver subordinados
-            if ($hasSub) {
-                echo '<div id="' . $subId . '" class="sub-container">';
-                    // renderiza recursivamente os subordinados (renderUserNode já gera a UL)
-                    renderUserNode($user['subordinates'], $allUsers);
-                echo '</div>';
-            }
-
-        echo '</li>';
-    }
-
-    echo '</ul>';
-}
-?>
+<?php require_once __DIR__ . '/_tree_partial.php'; ?>
 
 <script>const BASE_PATH = '<?= BASE_PATH ?>';</script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="<?= BASE_PATH ?>/js/organograma.js"></script>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -130,17 +16,180 @@ function renderUserNode($users, $allUsers = []) {
             <div class="btn-group me-3">
                 <button class="btn btn-sm btn-outline-light" onclick="expandAll()">Expandir Tudo</button>
                 <button class="btn btn-sm btn-outline-light" onclick="collapseAll()">Recolher Tudo</button>
+                <button id="btn-fullscreen" class="btn btn-sm btn-outline-light" title="Tela cheia" onclick="window.toggleFullscreenManual ? window.toggleFullscreenManual() : null">
+                    <i class="bi bi-arrows-fullscreen"></i>
+                </button>
             </div>
             <a href="<?= BASE_PATH ?>/admin/dashboard" class="text-white-50 small text-decoration-none">
                 ← Voltar para Dashboard
             </a>
         </div>
     </div>
+    
 
     <!-- Área da Árvore -->
     <div class="tree-wrapper">
+        
+        <!-- Toolbar Fixa na Base -->
+        <div class="org-toolbar-fixed-bottom" role="region" aria-label="Barra de pesquisa e filtros">
+            <div class="org-search-box">
+                <i class="bi bi-search search-icon"></i>
+                <input type="text" id="org-search-input" placeholder="Pesquisar por nome ou login..." onkeyup="handleSearch(this.value)">
+                <button class="btn-clear-search" onclick="clearOrgSearch()">
+                    <i class="bi bi-x-circle-fill"></i>
+                </button>
+            </div>
+
+            <div class="org-toolbar-separator"></div>
+
+            <!-- Grupo de Controles da Árvore -->
+            <div class="org-controls-group">
+                <button class="btn-org-control" onclick="expandAll()" title="Expandir Tudo">
+                    <i class="bi bi-plus-square"></i>
+                </button>
+                <button class="btn-org-control" onclick="collapseAll()" title="Recolher Tudo">
+                    <i class="bi bi-dash-square"></i>
+                </button>
+                <button class="btn-org-control" onclick="recenterTree()" title="Centralizar Árvore">
+                    <i class="bi bi-crosshair"></i>
+                </button>
+                <button class="btn-org-control" onclick="toggleFullscreenManual()" title="Tela Cheia">
+                    <i class="bi bi-arrows-fullscreen"></i>
+                </button>
+            </div>
+
+
+            <div class="org-filters-group">
+                <button id="btn-filter-adv" class="btn-filter-adv" onclick="toggleFilterPanel()" title="Filtros Avançados">
+                    <i class="bi bi-sliders"></i>
+                </button>
+            </div>
+
+            <div id="search-results-count" class="search-badge" style="display:none;">
+                <span class="badge bg-primary"><span id="results-num">0</span></span>
+            </div>
+        </div>
+        
         <div class="tree">
             <?php renderUserNode($masters, $allUsers); ?>
+        </div>
+    </div>
+
+    <!-- Gaveta Lateral de Filtros Avançados -->
+    <div class="offcanvas offcanvas-end org-filters-drawer" tabindex="-1" id="offcanvasFilters" aria-labelledby="offcanvasFiltersLabel">
+        <div class="offcanvas-header border-bottom">
+            <h5 class="offcanvas-title fw-bold" id="offcanvasFiltersLabel">
+                <i class="bi bi-sliders2-vertical me-2"></i>Filtros Avançados
+            </h5>
+            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+            <form id="form-filters-adv">
+                <!-- Filtro por Obra -->
+                <div class="mb-4">
+                    <label class="form-label fw-semibold small text-uppercase text-muted">Contrato / Obra</label>
+                    <select id="adv-filter-obra" class="form-select select2-filter" onchange="applyOrgFilters()">
+                        <option value="all">Todas as Obras</option>
+                        <!-- Preencher via PHP ou JS -->
+                    </select>
+                </div>
+
+                <!-- Filtro por Cidade -->
+                <div class="mb-4">
+                    <label class="form-label fw-semibold small text-uppercase text-muted">Cidade</label>
+                    <select id="adv-filter-cidade" class="form-select select2-filter" onchange="applyOrgFilters()">
+                        <option value="all">Todas as Cidades</option>
+                        <!-- Preencher via PHP ou JS -->
+                    </select>
+                </div>
+
+                <!-- Filtro por Cargo/Nível -->
+                <div class="mb-4">
+                    <label class="form-label fw-semibold small text-uppercase text-muted">Nível Hierárquico</label>
+                    <div class="list-group list-group-flush border rounded">
+                        <label class="list-group-item">
+                            <input class="form-check-input me-2" type="checkbox" value="master" checked onchange="applyOrgFilters()"> Master
+                        </label>
+                        <label class="list-group-item">
+                            <input class="form-check-input me-2" type="checkbox" value="supervisor" checked onchange="applyOrgFilters()"> Supervisor
+                        </label>
+                        <label class="list-group-item">
+                            <input class="form-check-input me-2" type="checkbox" value="gerente" checked onchange="applyOrgFilters()"> Gerente
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Filtro por Status -->
+                <div class="mb-4">
+                    <label class="form-label fw-semibold small text-uppercase text-muted">Status</label>
+                    <select id="adv-filter-status" class="form-select" onchange="fetchTreeByStatus(this.value)">
+                        <option value="all">Todos os Status</option>
+                        <option value="active" selected>Ativos</option>
+                        <option value="inactive">Inativos</option>
+                    </select>
+                </div>
+
+                <!-- Filtro de Exibição de Órfãos -->
+                <div class="mb-4">
+                    <label class="form-label fw-semibold small text-uppercase text-muted">Estrutura</label>
+                    <div class="form-check form-switch border p-2 rounded bg-light">
+                        <input class="form-check-input ms-0 me-2" type="checkbox" id="adv-filter-orphans" onchange="fetchTreeByStatus(document.getElementById('adv-filter-status').value)">
+                        <label class="form-check-label small fw-bold" for="adv-filter-orphans">Exibir usuários sem hierarquia</label>
+                    </div>
+                    <div class="form-text text-muted" style="font-size: 0.75rem;">
+                        Ative para ver usuários que não possuem líder nem subordinados.
+                    </div>
+                </div>
+
+                <!-- Filtro por Líder -->
+                <div class="mb-4">
+                    <label class="form-label fw-semibold small text-uppercase text-muted">Líder</label>
+                    <select id="adv-filter-leader" class="form-select" onchange="fetchTreeFromLeader(this.value)">
+                        <option value="">Todos os Líderes</option>
+                        <?php foreach (($leaders ?? []) as $l): ?>
+                            <option value="<?= (int)$l['id'] ?>">
+                                <?= htmlspecialchars(mb_strtoupper($l['nome'])) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <!-- Filtro por Abas (Acessos) -->
+                <div class="mb-4">
+                    <label class="form-label fw-semibold small text-uppercase text-muted">Abas / Acessos</label>
+                    <div class="list-group list-group-flush border rounded" style="max-height: 200px; overflow-y: auto;">
+                        <?php foreach (($allTabs ?? []) as $tab): ?>
+                            <label class="list-group-item py-1">
+                                <input class="form-check-input me-2 adv-filter-aba" 
+                                    type="checkbox" 
+                                    value="<​?= (int)$tab['id'] ?>" 
+                                    onchange="applyOrgFilters()">
+                                <?= htmlspecialchars(mb_strtoupper($tab['nome'])) ?>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <!-- Filtro por Permissões -->
+                <div class="mb-4">
+                    <label class="form-label fw-semibold small text-uppercase text-muted">Permissões</label>
+                    <div class="list-group list-group-flush border rounded" style="max-height: 200px; overflow-y: auto;">
+                        <?php foreach (($allPermissions ?? []) as $key => $label): ?>
+                            <label class="list-group-item py-1">
+                                <input class="form-check-input me-2 adv-filter-permissao" 
+                                    type="checkbox" 
+                                    value="<​?= htmlspecialchars($key) ?>" 
+                                    onchange="applyOrgFilters()">
+                                <?= htmlspecialchars(mb_strtoupper($label)) ?>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="offcanvas-footer p-3 border-top bg-light">
+            <button type="button" class="btn btn-outline-secondary w-100 mb-2" onclick="resetAdvFilters()">Limpar Filtros</button>
+            <button type="button" class="btn btn-primary w-100" data-bs-dismiss="offcanvas">Aplicar e Fechar</button>
         </div>
     </div>
 </div>
@@ -190,3 +239,16 @@ function renderUserNode($users, $allUsers = []) {
         </div>
     </div>
 </div>
+<script>
+// Teste direto na View para isolar o problema do arquivo externo
+function toggleFullscreenManual() {
+    const wrapper = document.querySelector('.tree-wrapper');
+    if (!wrapper) return alert('Container não encontrado');
+    
+    wrapper.classList.toggle('fullscreen-mode');
+    const isFull = wrapper.classList.contains('fullscreen-mode');
+    document.body.style.overflow = isFull ? 'hidden' : '';
+    
+    console.log('Fullscreen mode:', isFull);
+}
+</script>

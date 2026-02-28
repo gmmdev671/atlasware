@@ -244,18 +244,65 @@ class AccessController
     {
         SessionManager::requireLogin();
 
-        // Se não usa autoload, inclua o serviço manualmente:
-        // require_once __DIR__ . '/../Services/OrgChartService.php';
-        // use App\Services\OrgChartService; // se namespace suportado
-
-        // 1. Árvore principal a partir de `usuarios` (inclui órfãos como raízes)
+        // 1. Árvore principal
         $masters = \App\Services\OrgChartService::buildHumanHierarchyFromUsuarios();
 
-        // 2. Lista de todos os usuários para o Select de troca de líder
-        //    Agora vindo de `usuarios` (id e nome)
+        // 2. Lista de todos os usuários (usada no modal de troca de líder)
         $db = \getDbConnection();
         $stmt = $db->query("SELECT id, nome FROM usuarios ORDER BY nome ASC");
         $allUsers = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        // 3. Líderes Reais
+        $leaders = $this->userModel->getActiveLeaders();
+
+        // 4. Todas as abas para o filtro do Offcanvas
+        $stmtTabs = $db->query("SELECT id, nome FROM tb_tabs ORDER BY nome ASC");
+        $allTabs = $stmtTabs->fetchAll(\PDO::FETCH_ASSOC);
+
+        // 5. Lista de permissões legadas para o filtro do Offcanvas
+        $allPermissions = [
+            'editarss'          => 'Editar SS',
+            'editarRH'          => 'Editar RH',
+            'editarAlmox'       => 'Editar Almoxarifado',
+            'editarLancamento'  => 'Editar Lançamento',
+            'editarEquipamento' => 'Editar Equipamento',
+            'admEquipamento'    => 'Adm Equipamento',
+            'equipMaster'       => 'Equip Master',
+            'equipAC'           => 'Equip AC',
+            'cadEquipamento'    => 'Cad Equipamento',
+            'editarCTE'         => 'Editar CTE',
+            'editarEquipe'      => 'Editar Equipe',
+            'editarCargo'       => 'Editar Cargo',
+            'editarnota'        => 'Editar Nota',
+            'editarNum'         => 'Editar Número',
+            'criarNum'          => 'Criar Número',
+            'editarConc'        => 'Editar Conc',
+            'aprovarConc'       => 'Aprovar Conc',
+            'aprovarFE'         => 'Aprovar FE',
+            'aprovarLOC'        => 'Aprovar LOC',
+            'editarCons'        => 'Editar Cons',
+            'editarDataC'       => 'Editar Data C',
+            'editarRHDoc'       => 'Editar RH Doc',
+            'editarRHSit'       => 'Editar RH Sit',
+            'excluirAnexo'      => 'Excluir Anexo',
+            'editarAnexo'       => 'Editar Anexo',
+            'editarLibFunc'     => 'Editar Lib Func',
+            'editarDtRetSS'     => 'Editar Dt Ret SS',
+            'alterarEqRH'       => 'Alterar Eq RH',
+            'editarTST'         => 'Editar TST',
+            'aprovarNFZ'        => 'Aprovar NFZ',
+            'equipSit'          => 'Equip Sit',
+            'cadNF'             => 'Cad NF',
+            'abrirNF'           => 'Abrir NF',
+            'relAtestado'       => 'Rel Atestado',
+            'editarStatusEmp'   => 'Editar Status Emp',
+            'editarEmpresa'     => 'Editar Empresa',
+            'editarImovel'      => 'Editar Imóvel',
+            'editarLic'         => 'Editar Lic',
+            'cadCT'             => 'Cad CT',
+            'orcLic'            => 'Orc Lic',
+            'propriosPlaca'     => 'Próprios Placa',
+        ];
 
         $title = 'Hierarquia de Liderança';
         ob_start();
@@ -433,5 +480,97 @@ class AccessController
             header('Location: ' . BASE_PATH . '/admin/users/' . $userId . '?error=update_failed');
             exit;
         }
+    }
+
+    public function fetchOrganogramaTree(string $status): void
+    {
+        SessionManager::requireLogin();
+
+        $includeOrphans = ($_GET['includeOrphans'] ?? 'false') === 'true';
+        $roots = \App\Services\OrgChartService::buildHumanHierarchyByStatus($status, $includeOrphans);
+
+        // --- FUNÇÃO DE ENRIQUECIMENTO ---
+        $enrich = function (&$nodes) use (&$enrich) {
+            $db = getDbConnection(); // Usando o seu padrão de conexão
+            
+            foreach ($nodes as &$n) {
+                $userId = (int)($n['id'] ?? 0);
+                
+                if ($userId > 0) {
+                    // Buscamos o nivel_acesso diretamente do banco para garantir
+                    $stmt = $db->prepare("SELECT nivel_acesso FROM tb_users WHERE id = ?");
+                    $stmt->execute([$userId]);
+                    $val = $stmt->fetchColumn();
+                    
+                    // Atribuímos ao campo 'abas' que a view espera
+                    $n['abas'] = $val ?: '';
+                }
+
+                // Faz o mesmo para os subordinados (recursivo)
+                if (!empty($n['subordinates']) && is_array($n['subordinates'])) {
+                    $enrich($n['subordinates']);
+                }
+            }
+        };
+        
+        // Executa a busca para toda a árvore
+        $enrich($roots);
+        // --- FIM DO ENRIQUECIMENTO ---
+
+        require_once __DIR__ . '/../Views/access/_tree_partial.php';
+        header('Content-Type: text/html; charset=utf-8');
+        ob_clean();
+        renderUserNode($roots, $roots);
+        exit;
+    }
+
+    public function fetchOrganogramaTreeFromLeader(): void
+    {
+        SessionManager::requireLogin();
+
+        $leaderId = (int)($_GET['leaderId'] ?? 0);
+        $status   = $_GET['status'] ?? 'active';
+
+        if ($leaderId <= 0) {
+            http_response_code(400);
+            echo "leaderId inválido";
+            exit;
+        }
+
+        $roots = \App\Services\OrgChartService::buildHierarchyFromLeaderByStatus($leaderId, $status);
+
+        // --- FUNÇÃO DE ENRIQUECIMENTO ---
+        $enrich = function (&$nodes) use (&$enrich) {
+            $db = getDbConnection(); // Usando o seu padrão de conexão
+            
+            foreach ($nodes as &$n) {
+                $userId = (int)($n['id'] ?? 0);
+                
+                if ($userId > 0) {
+                    // Buscamos o nivel_acesso diretamente do banco para garantir
+                    $stmt = $db->prepare("SELECT nivel_acesso FROM tb_users WHERE id = ?");
+                    $stmt->execute([$userId]);
+                    $val = $stmt->fetchColumn();
+                    
+                    // Atribuímos ao campo 'abas' que a view espera
+                    $n['abas'] = $val ?: '';
+                }
+
+                // Faz o mesmo para os subordinados (recursivo)
+                if (!empty($n['subordinates']) && is_array($n['subordinates'])) {
+                    $enrich($n['subordinates']);
+                }
+            }
+        };
+        
+        // Executa a busca para toda a árvore
+        $enrich($roots);
+        // --- FIM DO ENRIQUECIMENTO ---
+
+        require_once __DIR__ . '/../Views/access/_tree_partial.php';
+        header('Content-Type: text/html; charset=utf-8');
+        ob_clean();
+        renderUserNode($roots, $roots);
+        exit;
     }
 }

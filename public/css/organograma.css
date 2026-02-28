@@ -5,7 +5,7 @@
 
 /* Variáveis padrão para largura do card e espaçamento das conexões */
 .organograma-humano-page {
-    --org-card-width: 660px;  /* largura máxima padrão */
+    --org-card-width: 760px;  /* largura máxima padrão */
     --org-trigger-width: 30px;
     --org-conn-gap: 40px;
     --conn-margin: 8px; /* corrigir variável faltante usada nos cálculos */
@@ -50,16 +50,73 @@
 
 /* Wrapper e área da árvore */
 .organograma-humano-page { padding:10px; width:100%; }
-.tree-wrapper { background: var(--bg); border-radius:12px; padding:30px; overflow:auto; max-height: calc(100vh - 150px); }
 
-/* Estrutura geral: colunas (níveis) e listas internas */
-.organograma-humano-page .tree {
-    display:flex;
-    flex-direction:row;
-    gap:28px;
-    align-items:flex-start;
-    padding:20px;
-    white-space:nowrap;
+/* Garante que o wrapper seja o limite visual da barra */
+.tree-wrapper { 
+    background: var(--bg);
+    border-radius: 12px;
+    padding: 20px;
+    overflow: hidden; 
+    height: calc(100vh - 120px); 
+    width: 100%;
+    position: relative !important; /* Mantém como referência */
+    cursor: grab;
+    user-select: none;
+    outline: none;
+}
+
+/* Cursor durante o arraste */
+.tree-wrapper.panning { 
+    cursor: grabbing; 
+}
+
+.tree-wrapper:active {
+    cursor: grabbing;
+}
+
+/* Classe para o modo Fullscreen */
+.tree-wrapper.fullscreen-mode {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9999 !important;
+    background: var(--bg) !important; /* Garante que o fundo não fique transparente */
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 40px !important;
+}
+
+.user-card button, .user-card a {
+    cursor: pointer;
+}
+
+.tree {
+    display: inline-block; 
+    flex-direction: row;
+    gap: 28px;
+    align-items: flex-start;
+    padding: 100px; /* Espaço extra para não encostar nas bordas ao arrastar */
+    white-space: nowrap;
+    
+    position: absolute; 
+    top: 0;
+    left: 0;
+    transition: none; /* Importante: transição mata a performance do arraste */
+    will-change: transform; /* Avisa o navegador para usar a GPU */
+    transform-origin: 0 0; /* Garante que o translate comece do topo-esquerda */
+}
+
+/* Proteção para o Drag & Drop de permissões */
+.tree-wrapper [draggable="true"] { 
+    -webkit-user-drag: element; 
+    cursor: grab;
+}
+
+/* Ajuste para os modais não ficarem atrás do fullscreen */
+.fullscreen-mode ~ .custom-modal {
+    z-index: 100000;
 }
 
 .organograma-humano-page .tree > ul {
@@ -106,11 +163,25 @@
     width: calc(var(--org-card-width) + var(--org-trigger-width) + 16px);
 }
 
+/* classe aplicada ao card inativo (já existia como cardClass) */
+.opacity-50 { opacity:0.5 !important; }
+.border-danger { border-color:#f8d7da !important; }
+
+/* protege a área de ações no canto direito para não colidir com texto */
+.card-header-user .user-actions-wrapper {
+    display:inline-flex;
+    gap:6px;
+    align-items:center;
+    margin-left:8px;
+    flex-shrink:0;
+}
+
 /* Card específico dentro do organograma (alto nível de especificidade para evitar overrides) */
 .organograma-humano-page .user-card {
     border: 1px solid #e2e8f0;
     padding: 12px 16px;
-    min-height: 120px;
+    height: auto !important; /* Permite que o card estique para baixo */
+    min-height: 100px;
     background: var(--card-bg);
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
@@ -180,15 +251,7 @@
     margin: 0 auto;
 }
 
-/* Wrapper da árvore */
-.tree-wrapper {
-    background: var(--bg);
-    border-radius: 12px;
-    padding: 20px;
-    overflow: auto;
-    max-height: calc(100vh - 100px);
-    max-width: 100%;
-}
+
 /* ---------------------------------------------
    LINHAS: pai -> tronco vertical -> filhos
    --------------------------------------------- */
@@ -285,6 +348,101 @@
    Permissões duas colunas - organograma (drag & drop)
    ============================ */
 
+/* ============================
+   Permissões (organograma) - layout compacto 2 colunas
+   Escopo: SOMENTE dentro de .organograma-humano-page para não poluir globalmente
+   ============================ */
+
+.organograma-humano-page .perms-two-column {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px; /* pequeno gap entre colunas */
+    align-items: start;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Faz os containers internos ficarem compactos */
+.organograma-humano-page .perms-active,
+.organograma-humano-page .perms-inactive {
+    max-height: 320px;   /* menor para comparação entre usuários */
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-radius: 6px;
+}
+
+/* grid de itens ativas -> 2 colunas dentro do container */
+.organograma-humano-page .permissions-grid-card {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); /* força 2 colunas */
+    gap: 6px 8px;   /* row-gap 6px, column-gap 8px */
+    align-items: start;
+    margin: 0;
+    padding: 0;
+}
+
+/* lista de inativas também em grid 2 colunas */
+.organograma-humano-page .perms-inactive-list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px 8px;
+    margin: 0;
+    padding: 0;
+}
+
+/* itens compactos (ativas e inativas) */
+.organograma-humano-page .perms-active .perm-draggable,
+.organograma-humano-page .perms-inactive .perm-draggable,
+.organograma-humano-page .permission-item-card,
+.organograma-humano-page .perm-inactive-item {
+    padding: 4px 6px !important;
+    margin: 0 !important;
+    font-size: 0.82rem !important;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-radius: 4px;
+}
+
+/* cor e estilo mais discreto no fundo para ler mais fácil em lista compacta */
+.organograma-humano-page .permission-item-card {
+    background: #f0fdf4;
+    border: 1px solid #d1f3d4;
+    color: #165c2d;
+    text-align: left;
+}
+
+/* inativas com estilo neutro */
+.organograma-humano-page .perm-inactive-item {
+    background: transparent;
+    color: #8b3a3a;
+}
+
+/* placeholder visual para drop (mantém compatibilidade) */
+.organograma-humano-page .drop-target {
+    outline: 2px dashed rgba(99,102,241,0.18);
+    border-radius: 6px;
+}
+
+/* Ajustes de título compactos */
+.organograma-humano-page .perms-active > .detail-section strong,
+.organograma-humano-page .perms-inactive > .panel-title {
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+
+/* Responsividade: empilha em 1 coluna em telas menores */
+@media (max-width: 920px) {
+    .organograma-humano-page .perms-two-column {
+        grid-template-columns: 1fr;
+    }
+    .organograma-humano-page .permissions-grid-card,
+    .organograma-humano-page .perms-inactive-list {
+        grid-template-columns: 1fr;
+    }
+}
+
 .perms-two-column {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -303,7 +461,6 @@
 .perms-active {
     background-color: #e6f4ea; /* verde claro */
     border: 1px solid #a3d3a1; /* verde médio */
-    padding: 12px;
     border-radius: 8px;
     box-shadow: 0 2px 6px rgba(0, 100, 0, 0.1);
     max-height: 60vh;
@@ -314,7 +471,6 @@
 .perms-inactive {
     background-color: #f8f0f0; /* vermelho muito claro / cinza rosado */
     border: 1px solid #d3a1a1; /* vermelho médio / cinza avermelhado */
-    padding: 12px;
     border-radius: 8px;
     box-shadow: 0 2px 6px rgba(150, 0, 0, 0.1);
     max-height: 60vh;
@@ -326,6 +482,7 @@
     max-height: 400px; /* Altura fixa com scroll interno */
     overflow-y: auto;
     overflow-x: hidden; /* Mata o scroll horizontal aqui */
+    padding: 8px !important;
 }
 
 /* Títulos das permissões ativas e inativas com estilo semelhante */
@@ -669,17 +826,44 @@
     gap: 8px;
 }
 
+.user-compact-info { 
+    display:flex; 
+    flex-direction:column; 
+    gap:6px; 
+}
+
 .user-first-name {
-    font-weight: 700;
-    color: #1f2937;
+    font-weight:700;
+    font-size:1rem;
+    color:#111827;
+    line-height:1.05;
 }
 
 .user-full-name {
-    display: none;
-    font-weight: 700;
-    color: #111827;
-    max-width: 420px;
+    color: #6b7280;
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: block;
+    
+    /* Permite que o nome ocupe várias linhas */
+    white-space: normal !important; 
     word-break: break-word;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    
+    /* Remove limites de largura que forçariam o corte */
+    max-width: 100% !important; 
+    line-height: 1.2;
+    margin-bottom: 4px;
+}
+
+.user-status-badge { margin-top:4px; }
+
+/* status classes (visuais extras caso queira) */
+.user-status-badge .badge {
+    padding: 4px 8px;
+    font-size:0.78rem;
+    border-radius: 12px;
 }
 
 .name-expand-btn {
@@ -763,4 +947,289 @@
     .obras-table.obras-table-3col tbody td {
         padding: 6px;
     }
+}
+
+/* ---------------------------
+   Esconder nome completo e status no expand
+   --------------------------- */
+
+/* Quando o card está expandido, escondemos o nome completo e o badge de status.
+   Mantemos o login (user-first-name) visível para referência. */
+.organograma-humano-page .user-card.expanded .user-full-name,
+.organograma-humano-page .user-card.expanded .user-status-badge {
+    display: none !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    transition: none !important;
+}
+
+/* reduzir gap do header quando expandido para não criar espaço vazio */
+.organograma-humano-page .user-card.expanded .user-compact-info {
+    gap: 2px;
+}
+
+/* garante que as ações no canto direito fiquem alinhadas ao topo do card quando o nome/status são escondidos */
+.organograma-humano-page .user-card.expanded .card-header-user {
+    align-items: flex-start;
+}
+
+/* A BARRA DEVE SER FIXADA EM RELAÇÃO AO WRAPPER */
+.org-toolbar-fixed-bottom {
+    /* Fixa em relação ao .tree-wrapper */
+    position: absolute; 
+    bottom: 20px; 
+    left: 50%;
+    transform: translateX(-50%);
+    
+    /* Garante que fique na frente de tudo */
+    z-index: 9999; 
+    
+    /* Visual (Glassmorphism) */
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(8px);
+    padding: 10px 20px;
+    border-radius: 50px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    
+    /* Permite clicar nos inputs mesmo com o fundo sendo "arrastável" */
+    pointer-events: all; 
+}
+
+/* Esconder qualquer barra duplicada que possa ter surgido por erro de cache ou inclusão */
+.org-toolbar-fixed-bottom + .org-toolbar-fixed-bottom {
+    display: none !important;
+}
+
+/* Se você quiser que ela ignore o scroll da árvore e fique travada na tela: */
+.fullscreen-mode .org-toolbar-fixed-bottom {
+    position: fixed;
+    bottom: 30px;
+}
+
+/* Ajuste para telas mobile/pequenas (abaixo de 768px) */
+@media (max-width: 767px) {
+    .org-toolbar-fixed-bottom {
+        bottom: 15px;
+        padding: 6px 10px;
+        gap: 5px;
+    }
+    
+    /* Esconde o texto do select para economizar espaço, mantém só a seta/ícone se necessário */
+    .org-filters-group select {
+        max-width: 110px;
+        font-size: 0.8rem;
+    }
+    
+    .org-search-box input::placeholder {
+        font-size: 0.8rem;
+    }
+}
+
+/* Ajuste para telas muito pequenas (abaixo de 480px) */
+@media (max-width: 480px) {
+    .org-toolbar-fixed-bottom {
+        flex-wrap: wrap; /* Permite quebrar linha se for MUITO pequeno */
+        justify-content: center;
+        border-radius: 20px;
+        min-width: 280px;
+    }
+    
+    .org-filters-group {
+        border-left: none;
+        padding-left: 0;
+        margin-top: 5px;
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Quando o mouse passa por cima, ela fica mais sólida */
+.org-toolbar-fixed-bottom:hover {
+    background: rgba(255, 255, 255, 1);
+    bottom: 25px;
+}
+
+.org-search-box {
+    flex: 1; 
+    min-width: 150px; 
+    display: flex;
+    align-items: center;
+    background: #f1f5f9;
+    border-radius: 25px;
+    padding: 2px 12px;
+}
+
+.org-search-box input {
+    border: none;
+    background: transparent;
+    padding: 6px;
+    outline: none;
+    width: 100%;
+    font-size: 0.9rem;
+}
+
+.org-filters-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-left: 1px solid #e2e8f0;
+    padding-left: 12px;
+}
+
+.org-filters-group select {
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
+    cursor: pointer;
+}
+
+/* Remove bordas e fundos indesejados dos botões da toolbar */
+.btn-clear-search, .btn-filter-adv {
+    border: none !important;
+    background: transparent !important;
+    outline: none !important;
+    box-shadow: none !important;
+    padding: 4px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+}
+
+/* Efeito de hover suave nos ícones */
+.btn-clear-search:hover, .btn-filter-adv:hover {
+    transform: scale(1.1);
+    color: #3b82f6; /* Cor azul ao passar o mouse */
+}
+
+/* Ajuste do ícone de fechar para não parecer um "bloco" */
+.btn-clear-search i {
+    font-size: 1.1rem;
+    color: #94a3b8;
+}
+
+/* Ajuste da linha separadora vertical */
+.org-filters-group {
+    border-left: 1px solid #e2e8f0;
+    margin-left: 8px;
+    padding-left: 8px;
+    display: flex;
+    align-items: center;
+}
+
+/* Estilo da Gaveta de Filtros */
+.org-filters-drawer {
+    width: 350px !important;
+    border-left: none;
+    box-shadow: -5px 0 25px rgba(0,0,0,0.1);
+}
+
+/* Cabeçalho da Gaveta com contraste */
+.org-filters-drawer .offcanvas-header {
+    background: #1e293b !important; /* Azul escuro profundo */
+    color: white !important;
+}
+
+.org-filters-drawer .offcanvas-title {
+    color: white !important;
+    font-weight: 700;
+}
+
+.org-filters-drawer .btn-close {
+    filter: invert(1) brightness(200%); /* Deixa o X branco */
+}
+
+.org-filters-drawer .btn-close:hover {
+    opacity: 1;
+}
+
+/* Ícone de sliders no título */
+.org-filters-drawer .offcanvas-title i {
+    color: #3b82f6; /* Azul vibrante para o ícone */
+}
+
+/* Estilo para os labels dos filtros na gaveta */
+.org-filters-drawer .form-label {
+    color: #64748b;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+}
+
+.org-filters-drawer .list-group-item {
+    font-size: 0.9rem;
+    padding: 10px 15px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.org-filters-drawer .list-group-item:hover {
+    background: #f1f5f9;
+}
+
+/* Ajuste do botão na pílula para abrir a gaveta */
+.btn-filter-adv {
+    position: relative;
+}
+
+/* Ponto indicador se houver filtros ativos */
+.btn-filter-adv.active::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 8px;
+    height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
+    border: 2px solid white;
+}
+
+.org-toolbar-separator {
+    width: 1px;
+    height: 24px;
+    background: rgba(0, 0, 0, 0.1);
+    margin: 0 5px;
+}
+
+.org-controls-group {
+    display: flex;
+    gap: 5px;
+}
+
+.btn-org-control {
+    background: transparent;
+    border: none;
+    color: #555;
+    padding: 5px 8px;
+    border-radius: 6px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+}
+
+.btn-org-control:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--primary-color);
+}
+
+/* Ajuste na largura da barra para acomodar os novos itens */
+.org-toolbar-fixed-bottom {
+    min-width: 450px; /* Aumentamos um pouco */
+}
+
+/* Força a gaveta e o fundo escuro a ficarem na frente de TUDO */
+.offcanvas {
+    z-index: 100000 !important;
+}
+
+.offcanvas-backdrop {
+    z-index: 99999 !important;
 }
