@@ -328,4 +328,27 @@ class User {
         $stmt = $this->db->query($sql);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    /**
+     * Retorna apenas os IDs dos cargos (roles) globais associados ao usuário.
+     * Útil para popular a interface de gestão de acessos (check-boxes).
+     * 
+     * @param int $userId
+     * @return array Lista de IDs de cargos (ex: [1, 3])
+     */
+    public function getRoleIds(int $userId): array
+    {
+        $db = \getDbConnection();
+        
+        $stmt = $db->prepare("
+            SELECT role_id 
+            FROM tb_user_roles 
+            WHERE user_id = :uid
+        ");
+        
+        $stmt->execute([':uid' => $userId]);
+        
+        // Retorna uma lista flat de inteiros: [1, 2, 5]
+        return $stmt->fetchAll(\PDO::FETCH_COLUMN);
+    }
 }

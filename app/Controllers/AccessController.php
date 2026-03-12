@@ -2,22 +2,27 @@
 // app/Controllers/AccessController.php
 namespace App\Controllers;
 
-use App\Core\SessionManager;
-use App\Core\Database;
 use App\Models\User;
 use App\Models\Role;
+use App\Models\Team;
+use App\Models\Permission;
 use App\Services\AuthorizationService;
+use App\Core\SessionManager;
 
 class AccessController
 {
     private User $userModel;
     private Role $roleModel;
+    private Team $teamModel;
+    private Permission $permissionModel;
     private AuthorizationService $auth;
 
     public function __construct()
     {
         $this->userModel = new User();
         $this->roleModel = new Role();
+        $this->teamModel = new Team();
+        $this->permissionModel = new Permission();
         $this->auth      = new AuthorizationService();
     }
 
@@ -26,19 +31,21 @@ class AccessController
      */
     public function index(): void
     {
-        // 1) Exige login
         SessionManager::requireLogin();
+        $currentUserId = (int)$_SESSION['user_id'];
 
-        // 2) TRAVA DE SEGURANÇA: verifica permissão
-        if (!$this->auth->canViewAccessOverview()) {
+        // 1) TRAVA DE SEGURANÇA: Verifica se pode ver a estrutura ou se é líder
+        if (!$this->auth->canViewAccessOverview() && !$this->auth->hasSubordinates($currentUserId)) {
             $this->renderError403();
             return;
         }
 
-        // 3) Buscar todos os roles (cargos)
+        // 2) Buscar dados auxiliares
         $roles = $this->roleModel->findAll();
+        $teams = $this->teamModel->findAll();
+        $permissions = $this->permissionModel->findAll();
 
-        // Mapeia nomes que vamos usar como "níveis"
+        // 3) Mapeamento de Níveis para as Colunas
         $roleNamesMap = [
             'master'       => ['master'],
             'coordenador'  => ['coordenador'],
@@ -46,21 +53,11 @@ class AccessController
             'funcionario'  => ['funcionário'],
         ];
 
-        // Mapa inverso: role_id => nome legível
         $roleIdToName = [];
+        $roleIdsByLevel = ['master' => [], 'coordenador' => [], 'gerente' => [], 'funcionario' => []];
+
         foreach ($roles as $role) {
             $roleIdToName[$role['id']] = $role['name'];
-        }
-
-        // Agrupa role_ids por nível
-        $roleIdsByLevel = [
-            'master'      => [],
-            'coordenador' => [],
-            'gerente'     => [],
-            'funcionario' => [],
-        ];
-
-        foreach ($roles as $role) {
             $name = mb_strtolower($role['name']);
             foreach ($roleNamesMap as $level => $patterns) {
                 foreach ($patterns as $p) {
@@ -72,10 +69,14 @@ class AccessController
             }
         }
 
-        // 4) Buscar todos os usuários com seus roles e times
-        $allUsers = $this->userModel->findAllWithRoles();
+        // 4) BUSCA FILTRADA POR ESCOPO
+        if ($this->auth->isMasterOrCoordinator($currentUserId)) {
+            $allUsers = $this->userModel->findAllWithRoles();
+        } else {
+            $allUsers = $this->getScopedUsersForManager($currentUserId);
+        }
 
-        // 5) Montar as colunas
+        // 5) Montar as colunas (Lógica original preservada)
         $columns = [
             'master'      => [],
             'coordenador' => [],
@@ -86,11 +87,8 @@ class AccessController
 
         foreach ($allUsers as $user) {
             $userRoleIds = $user['role_ids'] ?? [];
-
             $placed = false;
-            $principalRoleId = null;
 
-            // Prioridade: master > coordenador > gerente > funcionario
             foreach (['master', 'coordenador', 'gerente', 'funcionario'] as $level) {
                 if (!empty($roleIdsByLevel[$level])) {
                     $intersection = array_intersect($userRoleIds, $roleIdsByLevel[$level]);
@@ -104,7 +102,6 @@ class AccessController
                 }
             }
 
-            // Se não foi colocado em nenhuma coluna, vai para "sem_role"
             if (!$placed) {
                 if (!empty($userRoleIds)) {
                     $firstRoleId = reset($userRoleIds);
@@ -116,8 +113,8 @@ class AccessController
             }
         }
 
-        // 6) Renderizar a view
-        $title = 'Visão Geral de Acesso';
+        // 6) Renderizar
+        $title = 'Gestão de Equipe e Acessos';
         ob_start();
         require __DIR__ . '/../Views/access/main_access_view.php';
         $content = ob_get_clean();
@@ -147,7 +144,7 @@ class AccessController
     {
         SessionManager::requireLogin();
         
-        $tree = $this->buildTeamTree(null);
+        $tree = $this->buildTeamTreeOptimized(null);
 
         $title = 'Estrutura por Áreas';
         ob_start();
@@ -157,35 +154,76 @@ class AccessController
         require __DIR__ . '/../Views/layout/base.php';
     }
 
-    private function buildTeamTree(?int $parentId): array
+    private function buildTeamTreeOptimized(?int $parentId = null): array
     {
         $db = \getDbConnection();
-        
-        // Busca times do nível atual
-        $sql = "SELECT id, name FROM tb_teams WHERE " . ($parentId === null ? "parent_team_id IS NULL" : "parent_team_id = :pid");
-        $stmt = $db->prepare($sql);
-        if ($parentId !== null) $stmt->bindValue(':pid', $parentId);
-        $stmt->execute();
-        $teams = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
-        foreach ($teams as &$team) {
-            // A) Busca membros deste time (ordenados por level do cargo)
-            $stmtM = $db->prepare("
-                SELECT u.name, r.name as role_name, r.level
-                FROM tb_user_teams ut
-                JOIN tb_users u ON ut.user_id = u.id
-                JOIN tb_roles r ON ut.role_id = r.id
-                WHERE ut.team_id = :tid
-                ORDER BY r.level ASC
-            ");
-            $stmtM->execute([':tid' => $team['id']]);
-            $team['members'] = $stmtM->fetchAll(\PDO::FETCH_ASSOC);
+        // 1) Todos os times
+        $stmt = $db->query("SELECT id, name, parent_team_id FROM tb_teams ORDER BY name ASC");
+        $allTeams = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
-            // B) Busca sub-times (Recursão)
-            $team['subs'] = $this->buildTeamTree($team['id']);
+        // 2) Todos os membros de todos os times (uma única query)
+        $stmt2 = $db->query("
+            SELECT ut.team_id,
+                u.id AS user_id,
+                u.name AS user_name,
+                COALESCE(MIN(r.level), 9999) AS min_role_level,
+                GROUP_CONCAT(DISTINCT r.name SEPARATOR ', ') AS role_names
+            FROM tb_user_teams ut
+            JOIN tb_users u ON ut.user_id = u.id
+            LEFT JOIN tb_user_roles ur ON u.id = ur.user_id
+            LEFT JOIN tb_roles r ON ur.role_id = r.id
+            GROUP BY ut.team_id, u.id
+            ORDER BY ut.team_id, min_role_level ASC, u.name ASC
+        ");
+        $membersRows = $stmt2->fetchAll(\PDO::FETCH_ASSOC);
+
+        // 3) Agrupar membros por team_id
+        $membersByTeam = [];
+        foreach ($membersRows as $r) {
+            $tid = (int)$r['team_id'];
+            if (!isset($membersByTeam[$tid])) $membersByTeam[$tid] = [];
+            $membersByTeam[$tid][] = [
+                'id' => (int)$r['user_id'],
+                'name' => $r['user_name'],
+                'min_role_level' => (int)$r['min_role_level'],
+                'role_names' => $r['role_names']
+            ];
         }
 
-        return $teams;
+        // 4) Montar árvore em memória
+        $treeIndex = [];
+        foreach ($allTeams as $team) {
+            $teamId = (int)$team['id'];
+            $treeIndex[$teamId] = [
+                'id' => $teamId,
+                'name' => $team['name'],
+                'parent_team_id' => $team['parent_team_id'] === null ? null : (int)$team['parent_team_id'],
+                'members' => $membersByTeam[$teamId] ?? [],
+                'subs' => []
+            ];
+        }
+
+        // ligar filhos aos pais
+        $root = [];
+        foreach ($treeIndex as $id => &$node) {
+            $pid = $node['parent_team_id'];
+            if ($pid === null) {
+                $root[] = &$node;
+            } elseif (isset($treeIndex[$pid])) {
+                $treeIndex[$pid]['subs'][] = &$node;
+            } else {
+                // orfão — trate se necessário
+                $root[] = &$node;
+            }
+        }
+        unset($node);
+
+        // Se quiser retornar apenas a sub-árvore a partir de $parentId:
+        if ($parentId === null) return $root;
+
+        // busca no índice o nó com id == parentId
+        return isset($treeIndex[$parentId]) ? [$treeIndex[$parentId]] : [];
     }
 
     public function updateLeader(): void
@@ -272,16 +310,23 @@ class AccessController
     {
         $db = \getDbConnection();
         
-        // Busca usuários que respondem ao líder atual
-        $sql = "SELECT u.id, u.name, r.name as role_name, r.level as role_level
-                FROM tb_users u
-                LEFT JOIN tb_user_roles ur ON u.id = ur.user_id
-                LEFT JOIN tb_roles r ON ur.role_id = r.id
-                WHERE " . ($leaderId === null ? "u.id_lider IS NULL" : "u.id_lider = :lid") . "
-                ORDER BY r.level ASC, u.name ASC";
+        // Busca usuários que respondem ao líder atual, agregando informação de cargos globais
+        $sql = "
+            SELECT 
+                u.id, 
+                u.name, 
+                COALESCE(MIN(r.level), 9999) AS min_role_level,
+                GROUP_CONCAT(DISTINCT r.name SEPARATOR ', ') AS role_names
+            FROM tb_users u
+            LEFT JOIN tb_user_roles ur ON u.id = ur.user_id
+            LEFT JOIN tb_roles r ON ur.role_id = r.id
+            WHERE " . ($leaderId === null ? "u.id_lider IS NULL" : "u.id_lider = :lid") . "
+            GROUP BY u.id
+            ORDER BY min_role_level ASC, u.name ASC
+        ";
                 
         $stmt = $db->prepare($sql);
-        if ($leaderId !== null) $stmt->bindValue(':lid', $leaderId);
+        if ($leaderId !== null) $stmt->bindValue(':lid', $leaderId, \PDO::PARAM_INT);
         $stmt->execute();
         $users = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
@@ -292,6 +337,7 @@ class AccessController
                 FROM tb_user_teams ut
                 JOIN tb_teams t ON ut.team_id = t.id
                 WHERE ut.user_id = :uid
+                ORDER BY t.name ASC
             ");
             $stmtT->execute([':uid' => $user['id']]);
             $user['teams'] = $stmtT->fetchAll(\PDO::FETCH_COLUMN);
@@ -307,21 +353,22 @@ class AccessController
     {
         header('Content-Type: application/json; charset=utf-8');
 
-        // não redirecionar em endpoint
         if (!SessionManager::isLoggedIn()) {
             http_response_code(401);
             echo json_encode(['success' => false, 'message' => 'Não autenticado.']);
             exit;
         }
 
-        // se quiser restringir por permissão:
-        if (!$this->auth->canManageUsers()) {
+        // Permite Master/Coordenador ou quem tem manage_users
+        if (!$this->auth->canManageUsers() && !$this->auth->isMasterOrCoordinatorCurrent()) {
             http_response_code(403);
             echo json_encode(['success' => false, 'message' => 'Sem permissão.']);
             exit;
         }
 
         $userId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+        $teamId = isset($_GET['team_id']) ? (int)$_GET['team_id'] : null;
+
         if ($userId <= 0) {
             echo json_encode(['success' => false, 'message' => 'ID de usuário inválido.']);
             return;
@@ -335,18 +382,28 @@ class AccessController
             $stmt->execute();
             $allPermissions = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
-            // Permissões diretas do usuário
+            // Permissões diretas do usuário (global)
             $stmt = $db->prepare("SELECT permission_id FROM tb_user_permissions WHERE user_id = ?");
             $stmt->execute([$userId]);
-            $userPermissions = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+            $userPermissions = array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
 
-            // Normaliza para int
-            $userPermissions = array_map('intval', $userPermissions);
+            // Permissões concedidas ao usuário por time (se pedir por team_id) — opcional
+            $teamGrants = [];
+            if ($teamId !== null && $teamId > 0) {
+                $stmt = $db->prepare("
+                    SELECT permission_id 
+                    FROM tb_user_team_permissions
+                    WHERE user_id = :u AND team_id = :t
+                ");
+                $stmt->execute([':u' => $userId, ':t' => $teamId]);
+                $teamGrants = array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
+            }
 
             echo json_encode([
                 'success' => true,
                 'allPermissions' => $allPermissions,
                 'userPermissions' => $userPermissions,
+                'teamGrants' => $teamGrants,
             ]);
         } catch (\Throwable $e) {
             echo json_encode(['success' => false, 'message' => 'Erro ao carregar permissões: ' . $e->getMessage()]);
@@ -357,6 +414,15 @@ class AccessController
     {
         header('Content-Type: application/json; charset=utf-8');
 
+        if (!SessionManager::isLoggedIn()) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Não autenticado.']);
+            exit;
+        }
+
+        $actor = SessionManager::getUser();
+        $actorId = (is_array($actor) && isset($actor['id'])) ? (int)$actor['id'] : null;
+
         try {
             $raw = file_get_contents('php://input');
             $payload = json_decode($raw, true);
@@ -366,6 +432,13 @@ class AccessController
 
             if ($userId <= 0) {
                 echo json_encode(['success' => false, 'message' => 'ID de usuário inválido.']);
+                return;
+            }
+
+            // AUTORIZAÇÃO: quem pode alterar as permissões deste usuário?
+            if ($actorId === null || !$this->auth->canManageUser($actorId, $userId)) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Sem permissão para alterar permissões deste usuário.']);
                 return;
             }
 
@@ -381,6 +454,11 @@ class AccessController
 
             $db = getDbConnection();
 
+            // Captura permissões antigas para auditoria
+            $stmt = $db->prepare("SELECT permission_id FROM tb_user_permissions WHERE user_id = ?");
+            $stmt->execute([$userId]);
+            $oldPerms = array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
+
             $db->beginTransaction();
 
             // Remove todas as permissões diretas atuais
@@ -393,6 +471,21 @@ class AccessController
                 foreach ($permIds as $pid) {
                     $stmt->execute([$userId, $pid]);
                 }
+            }
+
+            // Auditoria (usando AuditLog model)
+            try {
+                $auditLog = new \App\Models\AuditLog();
+                $auditLog->log(
+                    'UPDATE_USER_PERMISSIONS',
+                    'tb_user_permissions',
+                    $userId,
+                    $oldPerms,
+                    $permIds
+                );
+            } catch (\Throwable $ae) {
+                // Não falhar o fluxo principal por erro de auditoria; apenas log
+                error_log("AuditLog error in updateUserPermissionsJson: " . $ae->getMessage());
             }
 
             $db->commit();
@@ -433,5 +526,35 @@ class AccessController
             header('Location: ' . BASE_PATH . '/admin/users/' . $userId . '?error=update_failed');
             exit;
         }
+    }
+
+    /**
+     * Método auxiliar para buscar usuários do escopo do gestor
+     */
+    private function getScopedUsersForManager(int $managerId): array
+    {
+        $db = \getDbConnection();
+        $teamIds = $this->auth->getUserTeamIds($managerId);
+        $teamIdsStr = !empty($teamIds) ? implode(',', $teamIds) : '0';
+
+        $sql = "
+            SELECT DISTINCT u.* 
+            FROM tb_users u
+            LEFT JOIN tb_user_teams ut ON u.id = ut.user_id
+            WHERE u.id_lider = :mid 
+               OR ut.team_id IN ($teamIdsStr)
+               OR u.id = :mid
+            ORDER BY u.name ASC
+        ";
+        
+        $stmt = $db->prepare($sql);
+        $stmt->execute([':mid' => $managerId]);
+        $users = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        foreach ($users as &$u) {
+            $u['role_ids'] = $this->userModel->getRoleIds((int)$u['id']);
+        }
+
+        return $users;
     }
 }

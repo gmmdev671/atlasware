@@ -305,13 +305,6 @@ if (preg_match('#^/admin/audit/(\d+)$#', $path, $matches)) {
     exit;
 }
 
-// === VISÃO GERAL DE ACESSO ===
-if ($path === '/admin/access' || $path === '/admin/access/') {
-    $controller = new AccessController();
-    $controller->index();
-    exit;
-}
-
 // Rota 1: Hierarquia Humana (id_lider)
 if ($path === '/admin/organograma' || $path === '/admin/organograma/') {
     $controller = new AccessController();
@@ -441,6 +434,85 @@ if ($method === 'GET' && ($path === '/admin/tabs/ajaxList' || $path === '/admin/
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }
+    exit;
+}
+
+// Listar permissões
+if ($path === '/admin/permissions' || $path === '/admin/permissions/') {
+    $controller = new \App\Controllers\PermissionController();
+    $controller->index();
+    exit;
+}
+
+// Formulário de criação
+if ($path === '/admin/permissions/create') {
+    $controller = new \App\Controllers\PermissionController();
+    $controller->create();
+    exit;
+}
+
+// Salvar nova permissão
+if ($path === '/admin/permissions/store') {
+    $controller = new \App\Controllers\PermissionController();
+    $controller->store();
+    exit;
+}
+
+// Formulário de edição
+if (preg_match('#^/admin/permissions/(\d+)/edit$#', $path, $matches)) {
+    $controller = new \App\Controllers\PermissionController();
+    $controller->edit((int)$matches[1]);
+    exit;
+}
+
+// Atualizar permissão
+if (preg_match('#^/admin/permissions/(\d+)/update$#', $path, $matches)) {
+    $controller = new \App\Controllers\PermissionController();
+    $controller->update((int)$matches[1]);
+    exit;
+}
+
+// Deletar permissão
+if (preg_match('#^/admin/permissions/(\d+)/delete$#', $path, $matches)) {
+    $controller = new \App\Controllers\PermissionController();
+    $controller->delete((int)$matches[1]);
+    exit;
+}
+
+// === GESTÃO DE ABAS (TABS) ===
+if ($path === '/admin/tabs' || $path === '/admin/tabs/') {
+    $controller = new \App\Controllers\TabController();
+    $controller->index();
+    exit;
+}
+
+if ($path === '/admin/tabs/create') {
+    $controller = new \App\Controllers\TabController();
+    $controller->create();
+    exit;
+}
+
+if ($path === '/admin/tabs/store') {
+    $controller = new \App\Controllers\TabController();
+    $controller->store();
+    exit;
+}
+
+if (preg_match('#^/admin/tabs/(\d+)/edit$#', $path, $matches)) {
+    $controller = new \App\Controllers\TabController();
+    $controller->edit((int)$matches[1]);
+    exit;
+}
+
+if (preg_match('#^/admin/tabs/(\d+)/update$#', $path, $matches)) {
+    $controller = new \App\Controllers\TabController();
+    $controller->update((int)$matches[1]);
+    exit;
+}
+
+if (preg_match('#^/admin/tabs/(\d+)/delete$#', $path, $matches)) {
+    $controller = new \App\Controllers\TabController();
+    $controller->delete((int)$matches[1]);
     exit;
 }
 

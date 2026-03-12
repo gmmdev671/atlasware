@@ -26,9 +26,18 @@ unset($_SESSION['success'], $_SESSION['error']);
         </div>
     <?php endif; ?>
 
+    <?php if (isset($this->auth) && $this->auth->isMasterOrCoordinatorCurrent()): ?>
+        <div class="alert alert-info d-flex align-items-center mb-4">
+            <i class="fas fa-info-circle me-2"></i>
+            <div>
+                <strong>Acesso elevado (Master/Coordenador):</strong> Você possui acesso total. As regras de delegação por nível são aplicadas quando usuários com nível menor fizerem delegações.
+            </div>
+        </div>
+    <?php endif; ?>
+
     <div class="card">
         <div class="card-body">
-            <form method="POST" action="<?= BASE_PATH ?>/admin/roles/<?= $role['id'] ?>/permissions/save">
+            <form method="POST" action="<?= BASE_PATH ?>/admin/roles/<?= (int)$role['id'] ?>/permissions/save">
                 <div class="mb-3">
                     <label class="form-label fw-bold">Selecione as Permissões:</label>
                     
@@ -43,11 +52,11 @@ unset($_SESSION['success'], $_SESSION['error']);
                                             class="form-check-input" 
                                             type="checkbox" 
                                             name="permissions[]" 
-                                            value="<?= $perm['id'] ?>"
-                                            id="perm_<?= $perm['id'] ?>"
+                                            value="<?= (int)$perm['id'] ?>"
+                                            id="perm_<?= (int)$perm['id'] ?>"
                                             <?= in_array($perm['id'], $rolePermissionIds) ? 'checked' : '' ?>
                                         >
-                                        <label class="form-check-label" for="perm_<?= $perm['id'] ?>">
+                                        <label class="form-check-label" for="perm_<?= (int)$perm['id'] ?>">
                                             <strong><?= htmlspecialchars($perm['name']) ?></strong>
                                             <?php if (!empty($perm['description'])): ?>
                                                 <br><small class="text-muted"><?= htmlspecialchars($perm['description']) ?></small>
