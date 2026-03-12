@@ -1,9 +1,10 @@
 <?php
 // app/Views/access/team_form.php
 $isEdit = !empty($team);
-$formAction = $isEdit 
-    ? "/atlasware/public/admin/teams/update/{$team['id']}" 
-    : "/atlasware/public/admin/teams/store";
+$base = defined('BASE_PATH') ? BASE_PATH : '/atlasware/public';
+$formAction = $isEdit
+    ? $base . "/admin/teams/{$team['id']}/update"
+    : $base . "/admin/teams/store";
 ?>
 <div class="access-page">
     <div class="card border-0 shadow-sm" style="max-width: 600px; margin: 0 auto;">

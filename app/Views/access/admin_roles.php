@@ -1,5 +1,6 @@
 <?php
 // app/Views/access/admin_roles.php
+$base = defined('BASE_PATH') ? BASE_PATH : '/atlasware/public';
 ?>
 <div class="access-page">
     
@@ -42,28 +43,20 @@
                                     </td>
                                     <td class="text-end pe-4">
                                         <div class="d-flex justify-content-end align-items-center gap-2">
-                                            <!-- Botão Editar (agora é button também) -->
-                                            <button type="button" 
-                                                    class="btn btn-outline-secondary action-btn"
-                                                    onclick="window.location.href='/atlasware/public/admin/roles/<?= $role['id'] ?>/edit'">
-                                                Editar
-                                            </button>
-                                            
-                                            <button type="button" 
-                                                    class="btn btn-outline-secondary action-btn"
-                                                    onclick="window.location.href='/atlasware/public/admin/roles/<?= $role['id'] ?>/permissions'">
-                                                Permissões
-                                            </button>
-                                            
-                                            <!-- Botão Excluir -->
-                                            <form action="/atlasware/public/admin/roles/delete/<?= $role['id'] ?>" 
-                                                method="POST" 
-                                                class="m-0" 
+                                            <!-- Editar (GET) -->
+                                            <a href="<?php echo $base; ?>/admin/roles/<?php echo (int)$role['id']; ?>/edit"
+                                            class="btn btn-outline-secondary action-btn">Editar</a>
+
+                                            <!-- Permissões (GET) -->
+                                            <a href="<?php echo $base; ?>/admin/roles/<?php echo (int)$role['id']; ?>/permissions"
+                                            class="btn btn-outline-secondary action-btn">Permissões</a>
+
+                                            <!-- Excluir (POST) -->
+                                            <form action="<?php echo $base; ?>/admin/roles/<?php echo (int)$role['id']; ?>/delete"
+                                                method="POST"
+                                                class="m-0"
                                                 onsubmit="return confirm('Tem certeza que deseja excluir este cargo?')">
-                                                <button type="submit" 
-                                                        class="btn btn-primary text-white action-btn">
-                                                    Excluir
-                                                </button>
+                                                <button type="submit" class="btn btn-primary text-white action-btn">Excluir</button>
                                             </form>
                                         </div>
                                     </td>

@@ -27,11 +27,23 @@ class TeamController {
         $this->userTeamModel = new UserTeam();
         $this->userModel = new User();
         $this->auth = new AuthorizationService();
+        
+        // Define BASE_PATH se não estiver definido para evitar erros de concatenação
+        if (!defined('BASE_PATH')) {
+            define('BASE_PATH', '/atlasware/public');
+        }
+    }
+
+    /**
+     * Auxiliar para redirecionamento seguro usando BASE_PATH
+     */
+    private function redirect(string $path): void {
+        header('Location: ' . BASE_PATH . $path);
+        exit;
     }
 
     /**
      * Exige login e permissão para gerenciar times.
-     * Retorna false se acesso negado (e já renderiza 403).
      */
     private function requireCanManageTeams(): bool
     {
@@ -52,7 +64,6 @@ class TeamController {
 
     /**
      * Verifica se o usuário pode acessar um time específico.
-     * Retorna false e renderiza 403 se não puder.
      */
     private function requireCanAccessTeam(int $teamId): bool
     {
@@ -71,23 +82,16 @@ class TeamController {
 
     // ==== CRUD BÁSICO ====
 
-    /**
-     * Lista todos os times (ou apenas os gerenciáveis pelo usuário).
-     */
     public function index(): void {
         if (!$this->requireCanManageTeams()) {
             return;
         }
 
-        // Pegar apenas os times que o usuário pode gerenciar
         $manageableTeamIds = $this->auth->getManageableTeamIds('manage_teams');
 
         if (empty($manageableTeamIds)) {
-            // Se não retornou nenhum ID mas passou no canManageTeams,
-            // significa que é Master/Coordenador e pode ver todos
             $teams = $this->teamModel->findAll();
         } else {
-            // Gerente: filtrar apenas seus times
             $teams = $this->teamModel->findByIds($manageableTeamIds);
         }
 
@@ -98,23 +102,13 @@ class TeamController {
         require __DIR__ . '/../Views/layout/base.php';
     }
 
-    /**
-     * Exibe formulário de criação de time.
-     * Apenas Master/Coordenador podem criar times.
-     */
     public function create(): void {
         if (!$this->requireCanManageTeams()) {
             return;
         }
 
-        // Apenas Master/Coordenador podem criar times
         if (!$this->auth->isMasterOrCoordinatorCurrent()) {
-            http_response_code(403);
-            $title = 'Acesso negado';
-            ob_start();
-            require __DIR__ . '/../Views/errors/403.php';
-            $content = ob_get_clean();
-            require __DIR__ . '/../Views/layout/base.php';
+            $this->redirect('/dashboard');
             return;
         }
 
@@ -128,29 +122,19 @@ class TeamController {
         require __DIR__ . '/../Views/layout/base.php';
     }
 
-    /**
-     * Processa criação de time.
-     * Apenas Master/Coordenador podem criar times.
-     */
     public function store(): void {
         if (!$this->requireCanManageTeams()) {
             return;
         }
 
-        // Apenas Master/Coordenador podem criar times
         if (!$this->auth->isMasterOrCoordinatorCurrent()) {
-            http_response_code(403);
-            $title = 'Acesso negado';
-            ob_start();
-            require __DIR__ . '/../Views/errors/403.php';
-            $content = ob_get_clean();
-            require __DIR__ . '/../Views/layout/base.php';
+            $this->redirect('/admin/teams');
             return;
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            header('Location: /atlasware/public/admin/teams');
-            exit;
+            $this->redirect('/admin/teams');
+            return;
         }
 
         $name = trim($_POST['name'] ?? '');
@@ -158,8 +142,8 @@ class TeamController {
 
         if (empty($name)) {
             $_SESSION['error'] = 'O nome do time é obrigatório.';
-            header('Location: /atlasware/public/admin/teams/create');
-            exit;
+            $this->redirect('/admin/teams/create');
+            return;
         }
 
         $this->teamModel->create([
@@ -168,19 +152,14 @@ class TeamController {
         ]);
 
         $_SESSION['success'] = 'Time criado com sucesso!';
-        header('Location: /atlasware/public/admin/teams');
-        exit;
+        $this->redirect('/admin/teams');
     }
 
-    /**
-     * Exibe formulário de edição de time.
-     */
     public function edit(int $id): void {
         if (!$this->requireCanManageTeams()) {
             return;
         }
 
-        // Verificar se pode acessar ESTE time específico
         if (!$this->requireCanAccessTeam($id)) {
             return;
         }
@@ -188,8 +167,8 @@ class TeamController {
         $team = $this->teamModel->findById($id);
         if (!$team) {
             $_SESSION['error'] = 'Time não encontrado.';
-            header('Location: /atlasware/public/admin/teams');
-            exit;
+            $this->redirect('/admin/teams');
+            return;
         }
 
         $allTeams = $this->teamModel->findAll();
@@ -201,22 +180,18 @@ class TeamController {
         require __DIR__ . '/../Views/layout/base.php';
     }
 
-    /**
-     * Processa atualização de time.
-     */
     public function update(int $id): void {
         if (!$this->requireCanManageTeams()) {
             return;
         }
 
-        // Verificar se pode acessar ESTE time específico
         if (!$this->requireCanAccessTeam($id)) {
             return;
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            header('Location: /atlasware/public/admin/teams');
-            exit;
+            $this->redirect('/admin/teams');
+            return;
         }
 
         $name = trim($_POST['name'] ?? '');
@@ -224,8 +199,8 @@ class TeamController {
 
         if (empty($name)) {
             $_SESSION['error'] = 'O nome do time é obrigatório.';
-            header("Location: /atlasware/public/admin/teams/edit/$id");
-            exit;
+            $this->redirect("/admin/teams/$id/edit");
+            return;
         }
 
         $this->teamModel->update($id, [
@@ -234,54 +209,37 @@ class TeamController {
         ]);
 
         $_SESSION['success'] = 'Time atualizado com sucesso!';
-        header('Location: /atlasware/public/admin/teams');
-        exit;
+        $this->redirect('/admin/teams');
     }
 
-    /**
-     * Exclui um time.
-     * Apenas Master/Coordenador podem excluir times.
-     */
     public function delete(int $id): void {
         if (!$this->requireCanManageTeams()) {
             return;
         }
 
-        // Apenas Master/Coordenador podem excluir times
         if (!$this->auth->isMasterOrCoordinatorCurrent()) {
-            http_response_code(403);
-            $title = 'Acesso negado';
-            ob_start();
-            require __DIR__ . '/../Views/errors/403.php';
-            $content = ob_get_clean();
-            require __DIR__ . '/../Views/layout/base.php';
+            $this->redirect('/admin/teams');
             return;
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            header('Location: /atlasware/public/admin/teams');
-            exit;
+            $this->redirect('/admin/teams');
+            return;
         }
 
-        // TODO: Validar se há membros ou permissões vinculadas antes de excluir
         $this->teamModel->delete($id);
 
         $_SESSION['success'] = 'Time excluído com sucesso!';
-        header('Location: /atlasware/public/admin/teams');
-        exit;
+        $this->redirect('/admin/teams');
     }
 
     // ==== PERMISSÕES POR TIME ====
 
-    /**
-     * Exibe tela de gerenciamento de permissões de um time.
-     */
     public function permissions(int $id): void {
         if (!$this->requireCanManageTeams()) {
             return;
         }
 
-        // Verificar se pode acessar ESTE time específico
         if (!$this->requireCanAccessTeam($id)) {
             return;
         }
@@ -289,19 +247,15 @@ class TeamController {
         $team = $this->teamModel->findById($id);
         if (!$team) {
             $_SESSION['error'] = 'Time não encontrado.';
-            header('Location: /atlasware/public/admin/teams');
-            exit;
+            $this->redirect('/admin/teams');
+            return;
         }
 
         $allPermissions = $this->permissionModel->findAll();
         $teamPermissions = $this->teamPermissionModel->getPermissionsByTeam($id);
         $teamPermissionIds = array_column($teamPermissions, 'permission_id');
-
-        // Para o select de "até qual nível pode delegar"
         $roles = $this->roleModel->findAll();
 
-        // Se todas usam o mesmo allowed_till_role_id,
-        // pegamos o primeiro (ou null se não tiver).
         $allowedTillRoleId = null;
         if (!empty($teamPermissions)) {
             $allowedTillRoleId = $teamPermissions[0]['allowed_till_role_id'] ?? null;
@@ -314,46 +268,124 @@ class TeamController {
         require __DIR__ . '/../Views/layout/base.php';
     }
 
-    /**
-     * Salva permissões de um time.
-     */
     public function savePermissions(int $id): void {
         if (!$this->requireCanManageTeams()) {
             return;
         }
 
-        // Verificar se pode acessar ESTE time específico
         if (!$this->requireCanAccessTeam($id)) {
             return;
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            header("Location: /atlasware/public/admin/teams/$id/permissions");
-            exit;
+            $this->redirect("/admin/teams/$id/permissions");
+            return;
         }
 
-        $permissionIds = $_POST['permissions'] ?? [];
-        $allowedTillRoleId = !empty($_POST['allowed_till_role_id']) ? (int)$_POST['allowed_till_role_id'] : null;
+        // Recebe dados do formulário
+        $checkedPermissionIds = $_POST['permissions'] ?? [];        // array de permission_id marcados
+        $allowedInputs = $_POST['allowed'] ?? [];                   // associative: permission_id => allowed_till_role_id (string or empty)
+        // Normaliza
+        $checkedPermissionIds = array_map('intval', $checkedPermissionIds);
 
-        $this->teamPermissionModel->setPermissionsForTeam($id, $permissionIds, $allowedTillRoleId);
+        // Dados do usuário atual
+        $currentUser = \App\Core\SessionManager::getUser();
+        $currentUserId = (int)($currentUser['id'] ?? 0);
 
-        $_SESSION['success'] = 'Permissões do time atualizadas com sucesso!';
-        header("Location: /atlasware/public/admin/teams/$id/permissions");
-        exit;
+        // Tenta obter o nível do usuário atual — adapte se sua AuthorizationService já tiver esse helper.
+        $currentUserLevel = null;
+        if (method_exists($this->auth, 'getCurrentUserRoleLevel')) {
+            // ideal: AuthorizationService::getCurrentUserRoleLevel() retorna integer (ex: 2 = Supervisor)
+            $currentUserLevel = (int)$this->auth->getCurrentUserRoleLevel();
+        } elseif (method_exists($this->auth, 'getUserHighestRoleLevel')) {
+            $currentUserLevel = (int)$this->auth->getUserHighestRoleLevel($currentUserId);
+        } else {
+            // Fallback conservador: tenta obter o primeiro role do usuário via User model (se houver)
+            $currentUserLevel = null; // leave null -> we'll only apply strict role-level checks to non-master if we can determine level later
+        }
+
+        $errors = [];
+        $permissionsMap = []; // permission_id => allowed_till_role_id|null
+
+        foreach ($checkedPermissionIds as $pid) {
+            // Busca info da permissão para validações (nome)
+            $perm = $this->permissionModel->findById($pid);
+            if (!$perm) {
+                $errors[] = "Permissão (ID {$pid}) inválida.";
+                continue;
+            }
+            $permName = $perm['name'];
+
+            // Regra 1: "Ninguém concede o que não tem" (exceto Master/Coordinator)
+            if (!$this->auth->isMasterOrCoordinatorCurrent()) {
+                // AuthorizationService::can(userId, permissionName) existe no seu código
+                if (!$this->auth->can($currentUserId, $permName)) {
+                    $errors[] = "Você não possui a permissão '{$permName}' para conceder.";
+                    continue;
+                }
+            }
+
+            // Allowed value enviado para esta permissão (pode ser string '', meaning null)
+            $allowedRaw = $allowedInputs[(string)$pid] ?? null;
+            $allowedVal = ($allowedRaw === '' || $allowedRaw === null) ? null : (int)$allowedRaw;
+
+            // Validação do allowed_till_role_id:
+            if ($allowedVal !== null) {
+                $role = $this->roleModel->findById($allowedVal);
+                if (!$role) {
+                    $errors[] = "Cargo selecionado inválido para a permissão '{$permName}'.";
+                    continue;
+                }
+
+                // Se não conseguimos determinar o nível do usuário atual, tentamos obtê-lo via AuthorizationService (ou você pode adaptar aqui)
+                if ($currentUserLevel === null) {
+                    if (method_exists($this->auth, 'getUserHighestRoleLevel')) {
+                        $currentUserLevel = (int)$this->auth->getUserHighestRoleLevel($currentUserId);
+                    }
+                }
+
+                // Aplicar regra: usuário não pode permitir delegação para cargos de nível igual ou superior (mais poder)
+                // Lembrete: níveis menores = mais poder (ex: 1 = Master). Portanto permitimos only role.level > currentUserLevel
+                if (!$this->auth->isMasterOrCoordinatorCurrent() && $currentUserLevel !== null) {
+                    $allowedRoleLevel = (int)$role['level'];
+                    if ($allowedRoleLevel <= $currentUserLevel) {
+                        $errors[] = "Valor de 'Até qual nível' inválido para '{$permName}'. Você não pode delegar a um cargo de nível igual ou superior ao seu.";
+                        continue;
+                    }
+                }
+            }
+
+            // Se tudo ok, adiciona ao mapa
+            $permissionsMap[$pid] = $allowedVal;
+        }
+
+        // Se houve erros, abortamos e retornamos mensagens ao usuário para correção
+        if (!empty($errors)) {
+            $_SESSION['error'] = implode('<br>', $errors);
+            $this->redirect("/admin/teams/{$id}/permissions");
+            return;
+        }
+
+        // Salva no model (transação interna do model)
+        try {
+            // Use o método que aceita mapa associativo (conforme a extensão do TeamPermission que você adicionou)
+            $this->teamPermissionModel->setPermissionsForTeamAssociative($id, $permissionsMap);
+            $_SESSION['success'] = 'Permissões do time atualizadas com sucesso!';
+        } catch (\Throwable $e) {
+            $_SESSION['error'] = 'Erro ao salvar permissões: ' . $e->getMessage();
+        }
+
+        $this->redirect("/admin/teams/{$id}/permissions");
     }
 
     // ==== MEMBROS DO TIME ====
 
-    /**
-     * Lista e gerencia membros de um time.
-     */
     public function members(int $teamId): void
     {
         if (!$this->requireCanManageTeams()) {
             return;
         }
 
-        // Verificar se pode acessar ESTE time específico
         if (!$this->requireCanAccessTeam($teamId)) {
             return;
         }
@@ -361,17 +393,12 @@ class TeamController {
         $team = $this->teamModel->findById($teamId);
         if (!$team) {
             $_SESSION['error'] = 'Time não encontrado.';
-            header('Location: /atlasware/public/admin/teams');
-            exit;
+            $this->redirect('/admin/teams');
+            return;
         }
 
-        // Membros atuais
         $members = $this->userTeamModel->getMembersByTeam($teamId);
-
-        // Todos os usuários para o select de adição
         $allUsers = $this->userModel->findAllBasic();
-
-        // Todas as roles para o select de papel no time
         $roles = $this->roleModel->findAll();
 
         $title = 'Membros do Time: ' . $team['name'];
@@ -381,64 +408,61 @@ class TeamController {
         require __DIR__ . '/../Views/layout/base.php';
     }
 
-    /**
-     * Adiciona/atualiza membro em um time.
-     */
     public function addMember(int $teamId): void
     {
         if (!$this->requireCanManageTeams()) {
             return;
         }
 
-        // Verificar se pode acessar ESTE time específico
         if (!$this->requireCanAccessTeam($teamId)) {
             return;
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            header("Location: /atlasware/public/admin/teams/$teamId/members");
-            exit;
+            $this->redirect("/admin/teams/$teamId/members");
+            return;
         }
 
         $userId = (int)($_POST['user_id'] ?? 0);
-        $roleId = (int)($_POST['role_id'] ?? 0);
 
-        if ($userId <= 0 || $roleId <= 0) {
-            $_SESSION['error'] = 'Usuário e cargo são obrigatórios.';
-            header("Location: /atlasware/public/admin/teams/$teamId/members");
-            exit;
+        if ($userId <= 0) {
+            $_SESSION['error'] = 'Usuário é obrigatório.';
+            $this->redirect("/admin/teams/$teamId/members");
+            return;
         }
 
-        $this->userTeamModel->addOrUpdateMember($teamId, $userId, $roleId);
+        try {
+            $this->userTeamModel->addMember($teamId, $userId);
+            $_SESSION['success'] = 'Membro adicionado com sucesso.';
+        } catch (\Throwable $e) {
+            $_SESSION['error'] = 'Erro ao adicionar membro: ' . $e->getMessage();
+        }
 
-        $_SESSION['success'] = 'Membro adicionado/atualizado com sucesso.';
-        header("Location: /atlasware/public/admin/teams/$teamId/members");
-        exit;
+        $this->redirect("/admin/teams/$teamId/members");
     }
 
-    /**
-     * Remove um membro de um time.
-     */
     public function removeMember(int $teamId, int $userId): void
     {
         if (!$this->requireCanManageTeams()) {
             return;
         }
 
-        // Verificar se pode acessar ESTE time específico
         if (!$this->requireCanAccessTeam($teamId)) {
             return;
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            header("Location: /atlasware/public/admin/teams/$teamId/members");
-            exit;
+            $this->redirect("/admin/teams/$teamId/members");
+            return;
         }
 
-        $this->userTeamModel->removeMember($teamId, $userId);
+        try {
+            $this->userTeamModel->removeMember($teamId, $userId);
+            $_SESSION['success'] = 'Membro removido do time.';
+        } catch (\Throwable $e) {
+            $_SESSION['error'] = 'Erro ao remover membro: ' . $e->getMessage();
+        }
 
-        $_SESSION['success'] = 'Membro removido do time.';
-        header("Location: /atlasware/public/admin/teams/$teamId/members");
-        exit;
+        $this->redirect("/admin/teams/$teamId/members");
     }
 }

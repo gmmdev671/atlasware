@@ -1,0 +1,231 @@
+/* Ajuste geral do container para fundo branco suave */
+.organograma-container {
+    padding: 24px;
+    background: #f9fafb; /* fundo branco claro */
+    min-height: 320px;
+}
+
+/* Ajuste do título para cor escura */
+.organograma-container .d-flex h4 {
+    color: #212529; /* texto escuro */
+}
+
+/* Container da árvore */
+.tree {
+    text-align: center;
+    overflow-x: auto;
+    padding: 12px 6px 40px;
+    display: flex;
+    justify-content: center; /* centraliza horizontalmente */
+}
+
+/* Ajuste para o UL da árvore */
+.tree ul {
+    padding-top: 20px;
+    position: relative;
+    transition: all 0.5s;
+    list-style-type: none;
+    margin: 0 auto; /* centraliza */
+    padding-left: 0;
+    display: flex;
+    justify-content: center; /* centraliza filhos */
+    gap: 20px; /* espaço entre os cards */
+}
+
+/* Cada LI como flex container vertical */
+.tree li {
+    position: relative;
+    padding: 20px 5px 0 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: all 0.5s;
+    min-width: 220px;
+}
+
+/* Linhas conectoras ajustadas para flex layout */
+.tree li::before, .tree li::after {
+    content: '';
+    position: absolute; 
+    top: 0; 
+    right: 50%;
+    border-top: 2px solid rgba(0,0,0,0.1);
+    width: 50%; 
+    height: 20px;
+}
+.tree li::after {
+    right: auto; 
+    left: 50%;
+    border-top: 2px solid rgba(0,0,0,0.1);
+}
+
+/* Ajustes para itens únicos / extremidades */
+.tree li:only-child::after, .tree li:only-child::before { display: none; }
+.tree li:only-child { padding-top: 0; }
+.tree li:first-child::before, .tree li:last-child::after { border: 0 none; }
+.tree li:last-child::before { border-right: 2px solid rgba(0,0,0,0.1); border-radius: 0 5px 0 0; }
+.tree li:first-child::after { border-radius: 5px 0 0 0; }
+
+/* Linha vertical que liga pai aos filhos */
+.tree ul ul::before {
+    content: '';
+    position: absolute; 
+    top: 0; 
+    left: 50%;
+    border-left: 2px solid rgba(0,0,0,0.1);
+    width: 0; 
+    height: 20px;
+}
+
+/* Card do time */
+.org-card {
+    border: 1px solid #dee2e6;
+    padding: 12px 14px;
+    display: inline-block;
+    border-radius: 10px;
+    background-color: #fff;
+    min-width: 220px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    position: relative;
+    z-index: 10;
+}
+
+/* Nome do time */
+.org-card strong {
+    display: block;
+    color: #0d6efd;
+    margin-bottom: 8px;
+    font-size: 1rem;
+}
+
+/* Container dos membros dentro do card */
+.org-members {
+    text-align: left;
+    font-size: 0.90rem;
+    margin-top: 6px;
+}
+
+/* Linha do membro */
+.member-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: #f8f9fa;
+    color: #333;
+}
+
+/* Nome do membro */
+.member-item .member-name {
+    display: inline-block;
+    max-width: 55%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Badges */
+.member-item .badge {
+    font-size: 0.75rem;
+    padding: 0.35em 0.55em;
+    border-radius: 0.5rem;
+}
+
+/* Pequenas melhorias visuais ao passar o mouse no card */
+.org-card:hover {
+    transform: translateY(-4px);
+    transition: transform 0.18s ease;
+}
+
+/* Responsive: empilha verticalmente em telas muito pequenas */
+@media (max-width: 640px) {
+    .tree {
+        flex-direction: column;
+        align-items: center;
+    }
+    .tree ul {
+        flex-direction: column;
+        gap: 12px;
+    }
+    .tree li {
+        min-width: auto;
+        width: 90vw;
+    }
+    .tree li::before, .tree li::after, .tree ul ul::before {
+        display: none;
+    }
+}
+
+/* --- Novas Ações do Card --- */
+
+.org-card-header {
+    border-bottom: 1px solid #eee;
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+}
+
+.card-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: 10px;
+}
+
+.btn-action {
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: #f0f2f5;
+    border: 1px solid #e4e6eb;
+    color: #65676b;
+    text-decoration: none;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0;
+}
+
+.btn-action:hover {
+    background: #e4e6eb;
+    color: #0d6efd;
+    border-color: #0d6efd;
+    transform: translateY(-2px);
+}
+
+/* Estilo específico para o botão de toggle (🔽/▶) */
+.btn-toggle-members {
+    font-size: 0.7rem;
+    line-height: 1;
+}
+
+/* --- Controle de Exibição dos Membros --- */
+
+.org-members {
+    transition: all 0.3s ease;
+    max-height: 1000px; /* Valor alto para permitir expansão */
+    opacity: 1;
+    overflow: hidden;
+}
+
+/* Classe que o JS alterna */
+.org-members.collapsed {
+    display: none;
+    max-height: 0;
+    opacity: 0;
+    margin: 0;
+    padding: 0;
+}
+
+/* Ajuste no título do time dentro do card para não quebrar com os botões */
+.team-title {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+    margin-bottom: 0 !important;
+}

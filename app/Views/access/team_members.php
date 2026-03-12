@@ -1,6 +1,5 @@
 <?php
 // app/Views/access/team_members.php
-
 ?>
 <div class="access-page">
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -14,7 +13,7 @@
 
     <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-white py-3">
-            <h5 class="mb-0 text-primary fw-bold">Adicionar / Atualizar Membro</h5>
+            <h5 class="mb-0 text-primary fw-bold">Adicionar Membro ao Time</h5>
         </div>
         <div class="card-body">
             <?php if (!empty($_SESSION['error'])): ?>
@@ -30,31 +29,21 @@
             <?php endif; ?>
 
             <form method="POST" action="/atlasware/public/admin/teams/<?= $team['id'] ?>/members/add" class="row g-3">
-                <div class="col-md-5">
+                <div class="col-md-10">
                     <label for="user_id" class="form-label fw-semibold">Usuário</label>
                     <select name="user_id" id="user_id" class="form-select" required>
-                        <option value="">Selecione um usuário...</option>
+                        <option value="">Selecione um usuário para adicionar a este time...</option>
                         <?php foreach ($allUsers as $u): ?>
                             <option value="<?= $u['id'] ?>">
                                 <?= htmlspecialchars($u['name']) ?> (ID: <?= $u['id'] ?>)
                             </option>
                         <?php endforeach; ?>
                     </select>
-                </div>
-                <div class="col-md-5">
-                    <label for="role_id" class="form-label fw-semibold">Cargo no Time</label>
-                    <select name="role_id" id="role_id" class="form-select" required>
-                        <option value="">Selecione um cargo...</option>
-                        <?php foreach ($roles as $r): ?>
-                            <option value="<?= $r['id'] ?>">
-                                <?= htmlspecialchars($r['name']) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
+                    <small class="text-muted">Os cargos são gerenciados globalmente no perfil do usuário.</small>
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary text-white w-100">
-                        Salvar
+                        Adicionar
                     </button>
                 </div>
             </form>
@@ -72,7 +61,7 @@
                         <tr>
                             <th>Usuário</th>
                             <th>E-mail</th>
-                            <th>Cargo no Time</th>
+                            <th>Cargos Globais</th>
                             <th class="text-end">Ações</th>
                         </tr>
                     </thead>
@@ -86,12 +75,23 @@
                         <?php else: ?>
                             <?php foreach ($members as $m): ?>
                                 <tr>
-                                    <td><?= htmlspecialchars($m['user_name']) ?> (ID: <?= $m['user_id'] ?>)</td>
-                                    <td><?= htmlspecialchars($m['user_email'] ?? '') ?></td>
-                                    <td><?= htmlspecialchars($m['role_name']) ?></td>
+                                    <td>
+                                        <span class="fw-bold"><?= htmlspecialchars($m['name']) ?></span>
+                                        <span class="text-muted small">(ID: <?= $m['id'] ?>)</span>
+                                    </td>
+                                    <td><?= htmlspecialchars($m['email'] ?? '') ?></td>
+                                    <td>
+                                        <?php if (!empty($m['role_names'])): ?>
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle">
+                                                <?= htmlspecialchars($m['role_names']) ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="text-muted small">Sem cargo definido</span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td class="text-end">
                                         <form method="POST"
-                                              action="/atlasware/public/admin/teams/<?= $team['id'] ?>/members/<?= $m['user_id'] ?>/remove"
+                                              action="/atlasware/public/admin/teams/<?= $team['id'] ?>/members/<?= $m['id'] ?>/remove"
                                               onsubmit="return confirm('Remover este usuário do time?');"
                                               class="d-inline">
                                             <button type="submit" class="btn btn-outline-danger btn-sm">

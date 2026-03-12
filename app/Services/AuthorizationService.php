@@ -1,5 +1,4 @@
 <?php
-// app/Services/AuthorizationService.php
 namespace App\Services;
 
 use PDO;
@@ -7,6 +6,7 @@ use PDO;
 class AuthorizationService
 {
     private PDO $db;
+    private array $teamAncestorsCache = [];
 
     public function __construct()
     {
@@ -22,15 +22,11 @@ class AuthorizationService
             session_start();
         }
 
-        if (!isset($_SESSION['user_id'])) {
-            return null;
-        }
-
-        return (int)$_SESSION['user_id'];
+        return $_SESSION['user_id'] ?? null;
     }
 
     /**
-     * Regra dinâmica: verifica se o usuário possui subordinados (tb_users.id_lider).
+     * Verifica se o usuário possui subordinados (tb_users.id_lider).
      */
     public function hasSubordinates(int $userId): bool
     {
@@ -46,83 +42,105 @@ class AuthorizationService
     }
 
     /**
-     * Motor genérico de permissão:
-     * - Permissão direta em tb_user_permissions
-     * - Permissão via cargo global (tb_user_roles + tb_role_permissions)
-     * - Permissão via papel em time (tb_user_teams + tb_role_permissions), se teamId informado
+     * Motor de permissão atualizado:
+     * 1) Permissão direta (tb_user_permissions)
+     * 2) Permissão via cargo global (tb_user_roles + tb_role_permissions)
+     * 3) Permissão concedida no escopo do time (tb_user_team_permissions)
+     * 4) Permissão via Time (tb_team_permissions) - Varre o time e seus ancestrais
      */
     public function can(int $userId, string $permissionName, ?int $teamId = null): bool
     {
-        // 1) Descobrir o ID da permissão pelo nome
-        $stmt = $this->db->prepare("
-            SELECT id 
-            FROM tb_permissions 
-            WHERE name = :name 
-            LIMIT 1
-        ");
+        // ATALHO MASTER: se o usuário for Master (min level == 1) -> tem tudo
+        $userLevel = $this->getUserMinRoleLevel($userId);
+        if ($userLevel !== null && $userLevel === 1) {
+            return true;
+        }
+
+        // 1) Obter ID da permissão
+        $stmt = $this->db->prepare("SELECT id FROM tb_permissions WHERE name = :name LIMIT 1");
         $stmt->execute([':name' => $permissionName]);
         $perm = $stmt->fetch(PDO::FETCH_ASSOC);
-
         if (!$perm) {
             return false;
         }
-
         $permissionId = (int)$perm['id'];
 
-        // 2) Permissão direta para o usuário (tb_user_permissions)
-        $stmt = $this->db->prepare("
-            SELECT 1 
-            FROM tb_user_permissions 
-            WHERE user_id = :user_id 
-              AND permission_id = :permission_id 
-            LIMIT 1
-        ");
-        $stmt->execute([
-            ':user_id'       => $userId,
-            ':permission_id' => $permissionId,
-        ]);
+        // 2) Permissão direta do usuário (tb_user_permissions)
+        $stmt = $this->db->prepare("SELECT 1 FROM tb_user_permissions WHERE user_id = :u AND permission_id = :p LIMIT 1");
+        $stmt->execute([':u' => $userId, ':p' => $permissionId]);
         if ($stmt->fetch()) {
             return true;
         }
 
-        // 3) Permissão via cargo global (tb_user_roles + tb_role_permissions)
+        // 3) Permissão via cargos globais (tb_user_roles -> tb_role_permissions)
         $stmt = $this->db->prepare("
             SELECT 1
             FROM tb_user_roles ur
             JOIN tb_role_permissions rp ON ur.role_id = rp.role_id
-            WHERE ur.user_id = :user_id 
-              AND rp.permission_id = :permission_id
+            WHERE ur.user_id = :u AND rp.permission_id = :p
             LIMIT 1
         ");
-        $stmt->execute([
-            ':user_id'       => $userId,
-            ':permission_id' => $permissionId,
-        ]);
+        $stmt->execute([':u' => $userId, ':p' => $permissionId]);
         if ($stmt->fetch()) {
             return true;
         }
 
-        // 4) Permissão via papel em time (tb_user_teams + tb_role_permissions), se teamId informado
+        // 3.5) Permissão concedida especificamente para este usuário neste time (tb_user_team_permissions)
         if ($teamId !== null) {
             $stmt = $this->db->prepare("
                 SELECT 1
-                FROM tb_user_teams ut
-                JOIN tb_role_permissions rp ON ut.role_id = rp.role_id
-                WHERE ut.user_id      = :user_id 
-                  AND ut.team_id      = :team_id 
-                  AND rp.permission_id = :permission_id
+                FROM tb_user_team_permissions
+                WHERE user_id = :u AND team_id = :t AND permission_id = :p
                 LIMIT 1
             ");
-            $stmt->execute([
-                ':user_id'       => $userId,
-                ':team_id'       => $teamId,
-                ':permission_id' => $permissionId,
-            ]);
+            $stmt->execute([':u' => $userId, ':t' => $teamId, ':p' => $permissionId]);
             if ($stmt->fetch()) {
                 return true;
             }
         }
 
+        // 4) Permissões definidas no time / hierarquia de times (tb_team_permissions)
+        if ($teamId !== null) {
+            $ancestors = $this->getTeamAncestors($teamId);      // [teamId, parent, ...]
+            // $userLevel já calculado acima (pode ser null)
+            $stmtTeamPerm = $this->db->prepare("
+                SELECT allowed_till_role_id
+                FROM tb_team_permissions
+                WHERE team_id = :t AND permission_id = :p
+                LIMIT 1
+            ");
+            $stmtRoleLevel = $this->db->prepare("SELECT level FROM tb_roles WHERE id = :rid LIMIT 1");
+
+            foreach ($ancestors as $tId) {
+                $stmtTeamPerm->execute([':t' => $tId, ':p' => $permissionId]);
+                $teamPerm = $stmtTeamPerm->fetch(PDO::FETCH_ASSOC);
+
+                if (!$teamPerm) {
+                    continue;
+                }
+
+                // Se a permissão do time não tem restrição de nível, concede
+                if ($teamPerm['allowed_till_role_id'] === null) {
+                    return true;
+                }
+
+                // Há restrição: verificar o level do role limite
+                $stmtRoleLevel->execute([':rid' => (int)$teamPerm['allowed_till_role_id']]);
+                $limitRow = $stmtRoleLevel->fetch(PDO::FETCH_ASSOC);
+                if (!$limitRow) {
+                    continue;
+                }
+
+                $limitLevel = (int)$limitRow['level'];
+
+                // Só concede se o usuário tiver algum cargo global e seu level for <= limitLevel
+                if ($userLevel !== null && $userLevel <= $limitLevel) {
+                    return true;
+                }
+            }
+        }
+
+        // Sem permissão encontrada
         return false;
     }
 
@@ -144,7 +162,8 @@ class AuthorizationService
     // ============================================================
 
     /**
-     * Verifica se o usuário tem um cargo específico (por nome).
+     * Verifica se o usuário tem um cargo específico (por nome) globalmente.
+     * Usa LIKE para casar substrings (ex: "Master" casa com "01.00 Master").
      */
     public function hasRole(int $userId, string $roleName): bool
     {
@@ -153,15 +172,16 @@ class AuthorizationService
             FROM tb_user_roles ur
             JOIN tb_roles r ON ur.role_id = r.id
             WHERE ur.user_id = :user_id 
-              AND LOWER(r.name) = LOWER(:role_name)
+            AND LOWER(r.name) LIKE :pattern
             LIMIT 1
         ");
+        $pattern = '%' . mb_strtolower($roleName) . '%';
         $stmt->execute([
-            ':user_id'    => $userId,
-            ':role_name'  => $roleName,
+            ':user_id'   => $userId,
+            ':pattern'   => $pattern,
         ]);
 
-        return (bool)$stmt->fetch();
+        return (bool) $stmt->fetch();
     }
 
     /**
@@ -178,11 +198,37 @@ class AuthorizationService
     }
 
     /**
-     * Verifica se o usuário é Master ou Coordenador.
+     * Atalho para verificar se o usuário é Master (Level 1).
+     * Master sempre tem level 1 no nosso sistema.
+     */
+    public function isMaster(int $userId): bool
+    {
+        $level = $this->getUserMinRoleLevel($userId);
+        return $level === 1;
+    }
+
+    /**
+     * Verifica se o usuário é Master ou Coordenador (Baseado em nomes ou levels baixos).
      */
     public function isMasterOrCoordinator(int $userId): bool
     {
-        return $this->hasRole($userId, 'Master') || $this->hasRole($userId, 'Coordenador');
+        // 1) Level-based shortcut: Master = level 1
+        $level = $this->getUserMinRoleLevel($userId);
+        if ($level !== null && $level === 1) {
+            return true;
+        }
+
+        // 2) Substring match (ex: "Coordenador" presente no nome)
+        if ($this->hasRole($userId, 'Coordenador')) {
+            return true;
+        }
+
+        // 3) Caso queira considerar "coordenador" por permissão específica:
+        if ($this->can($userId, 'manage_teams') || $this->can($userId, 'manage_users')) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -359,14 +405,14 @@ class AuthorizationService
             return false;
         }
 
+        // Master/Coordenador => acesso total (independente de tb_role_permissions)
+        if ($this->isMasterOrCoordinator($userId)) {
+            return true;
+        }
+
         // Precisa ter a permissão base
         if (!$this->can($userId, 'manage_users')) {
             return false;
-        }
-
-        // Master/Coordenador: acesso total
-        if ($this->isMasterOrCoordinator($userId)) {
-            return true;
         }
 
         // Gerente: apenas se for membro do time
@@ -421,15 +467,15 @@ class AuthorizationService
             return [];
         }
 
-        // Precisa ter a permissão base
-        if (!$this->can($userId, $permissionName)) {
-            return [];
-        }
-
-        // Master/Coordenador: todos os times
+        // Master/Coordenador: todos os times, não precisa ter o permissionName mapeado
         if ($this->isMasterOrCoordinator($userId)) {
             $stmt = $this->db->query("SELECT id FROM tb_teams");
             return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+        }
+
+        // Precisa ter a permissão base
+        if (!$this->can($userId, $permissionName)) {
+            return [];
         }
 
         // Gerente: apenas seus times
@@ -438,6 +484,21 @@ class AuthorizationService
         }
 
         return [];
+    }
+
+    /**
+     * Retorna array de roles (id, name, level) do usuário — útil para debugging.
+     */
+    public function getUserRolesInfo(int $userId): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT r.id, r.name, r.level
+            FROM tb_user_roles ur
+            JOIN tb_roles r ON ur.role_id = r.id
+            WHERE ur.user_id = :uid
+        ");
+        $stmt->execute([':uid' => $userId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     // ============================================================
@@ -492,70 +553,62 @@ class AuthorizationService
             return false;
         }
 
-        // Regra dinâmica principal:
+        // Master ou Coordenador sempre podem gerenciar permissões
+        if ($this->isMasterOrCoordinator($userId)) {
+            return true;
+        }
+
+        // Caso contrário, checar se tem subordinados (regra original)
         return $this->hasSubordinates($userId);
     }
-
     /**
-     * Verifica se o Ator pode gerenciar o Alvo dentro de um time específico.
-     * 
-     * Regra: Menor level = Mais poder
-     * - actorLevel < targetLevel → pode gerenciar
-     * - actorLevel >= targetLevel → não pode gerenciar
-     * - Master (level 1) sempre pode (se estiver no time)
-     * 
-     * @param int $actorId  ID do usuário que quer realizar a ação
-     * @param int $targetId ID do usuário alvo da ação
-     * @param int $teamId   ID do time onde a ação ocorre
-     * @return bool
+     * Verifica se o Ator pode gerenciar o Alvo.
+     * Regra: Menor level global = Mais poder.
+     * O Ator deve ter um level estritamente menor que o Alvo.
      */
-    public function canManageUserInTeam(int $actorId, int $targetId, int $teamId): bool
+    public function canManageUser(int $actorId, int $targetId): bool
     {
-        // 1. Busca o nível do ator no time
-        $actorLevel = $this->getUserLevelInTeam($actorId, $teamId);
-        
-        // 2. Busca o nível do alvo no time
-        $targetLevel = $this->getUserLevelInTeam($targetId, $teamId);
+        $actorLevel = $this->getUserMinRoleLevel($actorId);
+        $targetLevel = $this->getUserMinRoleLevel($targetId);
 
-        // Se algum não estiver no time, não pode gerenciar
         if ($actorLevel === null || $targetLevel === null) {
             return false;
         }
         
-        // Master (level 1) sempre pode gerenciar qualquer um no time
-        if ($actorLevel === 1) {
+        // Master (level 1) sempre pode gerenciar qualquer um abaixo dele
+        if ($actorLevel === 1 && $targetLevel > 1) {
             return true;
         }
 
-        // Regra: Menor valor = Mais poder
+        // Regra: Quem tem número menor (ex: 10) manda em quem tem número maior (ex: 20)
         return $actorLevel < $targetLevel;
     }
 
     /**
-     * Obtém o nível (level) do cargo de um usuário dentro de um time específico.
-     * 
-     * @param int $userId ID do usuário
-     * @param int $teamId ID do time
-     * @return int|null Retorna o level ou null se o usuário não estiver no time
+     * Verifica se o Ator pode gerenciar o Alvo dentro do contexto de um time.
+     * Além do level, verifica se o Ator tem autoridade sobre o time do Alvo.
      */
-    private function getUserLevelInTeam(int $userId, int $teamId): ?int
+    public function canManageUserInTeam(int $actorId, int $targetId, int $teamId): bool
     {
-        $stmt = $this->db->prepare("
-            SELECT r.level 
-            FROM tb_user_teams ut
-            JOIN tb_roles r ON ut.role_id = r.id
-            WHERE ut.user_id = :user_id 
-            AND ut.team_id = :team_id
-            LIMIT 1
-        ");
-        $stmt->execute([
-            ':user_id'  => $userId,
-            ':team_id'  => $teamId,
-        ]);
-        
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        return $result ? (int)$result['level'] : null;
+        // 1. Primeiro checa a hierarquia de poder (Level Global)
+        if (!$this->canManageUser($actorId, $targetId)) {
+            return false;
+        }
+
+        // 2. Verifica se o Alvo realmente pertence ao time informado
+        if (!$this->isMemberOfTeam($targetId, $teamId)) {
+            return false;
+        }
+
+        // 3. O Ator deve ser membro do time ou de um time ancestral (Pai)
+        $ancestors = $this->getTeamAncestors($teamId);
+        foreach ($ancestors as $tId) {
+            if ($this->isMemberOfTeam($actorId, $tId)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -573,5 +626,213 @@ class AuthorizationService
         }
 
         return $this->canManageUserInTeam($userId, $targetId, $teamId);
+    }
+
+    /**
+     * Verifica se o Grantor (Líder) pode conceder uma permissão a um Grantee (Subordinado).
+     * Regras do Chefe:
+     * 1. O Líder deve possuir a permissão que deseja conceder no contexto do time.
+     * 2. O Líder deve ter um level global MENOR (mais poder) que o Subordinado.
+     * 3. O Líder deve ser membro do time ou de um time ancestral (autoridade sobre o escopo).
+     */
+    public function canGrantPermission(int $grantorId, int $granteeId, string $permissionName, int $teamId): bool
+    {
+        // 1. O Líder tem a permissão que quer dar?
+        if (!$this->can($grantorId, $permissionName, $teamId)) {
+            return false;
+        }
+
+        // 2. O Líder tem poder hierárquico sobre o subordinado? (Level Global)
+        if (!$this->canManageUser($grantorId, $granteeId)) {
+            return false;
+        }
+
+        // 3. O Líder tem autoridade sobre o time em questão?
+        $isAuthority = false;
+        $ancestors = $this->getTeamAncestors($teamId);
+        foreach ($ancestors as $tId) {
+            if ($this->isMemberOfTeam($grantorId, $tId)) {
+                $isAuthority = true;
+                break;
+            }
+        }
+
+        return $isAuthority;
+    }
+
+    /**
+     * Concede uma permissão ao usuário no escopo de um time e registra auditoria.
+     * Retorna true se a permissão foi criada ou já existia; false em erro/negado.
+     */
+    public function grantPermission(int $grantorId, int $granteeId, string $permissionName, int $teamId, ?string $comment = null): bool
+    {
+        // 0) Valida existência da permissão
+        $stmt = $this->db->prepare("SELECT id FROM tb_permissions WHERE name = :name LIMIT 1");
+        $stmt->execute([':name' => $permissionName]);
+        $perm = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$perm) {
+            return false; // permissão desconhecida
+        }
+        $permissionId = (int)$perm['id'];
+
+        // 1) Verifica regra: grantor pode conceder?
+        if (!$this->canGrantPermission($grantorId, $granteeId, $permissionName, $teamId)) {
+            return false;
+        }
+
+        try {
+            $this->db->beginTransaction();
+
+            // 2) Insere idempotente em tb_user_team_permissions
+            $insertSql = "
+                INSERT INTO tb_user_team_permissions (user_id, team_id, permission_id, granted_by)
+                VALUES (:user_id, :team_id, :permission_id, :granted_by)
+                ON DUPLICATE KEY UPDATE granted_by = VALUES(granted_by), granted_at = CURRENT_TIMESTAMP
+            ";
+            $stmtIns = $this->db->prepare($insertSql);
+            $stmtIns->execute([
+                ':user_id'       => $granteeId,
+                ':team_id'       => $teamId,
+                ':permission_id' => $permissionId,
+                ':granted_by'    => $grantorId,
+            ]);
+
+            // 3) Registrar auditoria em tb_permission_audit
+            $auditSql = "
+                INSERT INTO tb_permission_audit (user_id, permission_id, team_id, action, performed_by, comment)
+                VALUES (:user_id, :permission_id, :team_id, 'granted', :performed_by, :comment)
+            ";
+            $stmtAudit = $this->db->prepare($auditSql);
+            $stmtAudit->execute([
+                ':user_id'       => $granteeId,
+                ':permission_id' => $permissionId,
+                ':team_id'       => $teamId,
+                ':performed_by'  => $grantorId,
+                ':comment'       => $comment,
+            ]);
+
+            $this->db->commit();
+            return true;
+        } catch (\Exception $e) {
+            $this->db->rollBack();
+            error_log("grantPermission error: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Revoga uma permissão de um usuário em um time e registra na auditoria.
+     */
+    public function revokePermission(int $performerId, int $targetUserId, string $permissionName, int $teamId, ?string $comment = null): bool
+    {
+        $stmt = $this->db->prepare("SELECT id FROM tb_permissions WHERE name = :name LIMIT 1");
+        $stmt->execute([':name' => $permissionName]);
+        $perm = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$perm) return false;
+        $permissionId = (int)$perm['id'];
+
+        // Regra: Quem revoga deve ter poder para gerenciar o alvo no time
+        if (!$this->canManageUserInTeam($performerId, $targetUserId, $teamId)) {
+            return false;
+        }
+
+        try {
+            $this->db->beginTransaction();
+
+            // Remove a permissão específica
+            $stmtDel = $this->db->prepare("DELETE FROM tb_user_team_permissions WHERE user_id = :u AND team_id = :t AND permission_id = :p");
+            $stmtDel->execute([':u' => $targetUserId, ':t' => $teamId, ':p' => $permissionId]);
+
+            // Auditoria
+            $stmtAudit = $this->db->prepare("
+                INSERT INTO tb_permission_audit (user_id, permission_id, team_id, action, performed_by, comment)
+                VALUES (:u, :p, :t, 'revoked', :pb, :c)
+            ");
+            $stmtAudit->execute([':u' => $targetUserId, ':p' => $permissionId, ':t' => $teamId, ':pb' => $performerId, ':c' => $comment]);
+
+            $this->db->commit();
+            return true;
+        } catch (\Exception $e) {
+            $this->db->rollBack();
+            return false;
+        }
+    }
+
+    /**
+     * Retorna array de IDs do team começando pelo próprio e subindo até a raiz.
+     * Usa cache em memória para esta instância do AuthorizationService.
+     */
+    private function getTeamAncestors(int $teamId): array
+    {
+        if (isset($this->teamAncestorsCache[$teamId])) {
+            return $this->teamAncestorsCache[$teamId];
+        }
+
+        $anc = [];
+        $current = $teamId;
+        $stmt = $this->db->prepare("SELECT parent_team_id FROM tb_teams WHERE id = :id LIMIT 1");
+
+        while ($current !== null) {
+            $anc[] = (int)$current;
+            $stmt->execute([':id' => $current]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$row || $row['parent_team_id'] === null) {
+                break;
+            }
+            $current = (int)$row['parent_team_id'];
+        }
+
+        $this->teamAncestorsCache[$teamId] = $anc;
+        return $anc;
+    }
+
+    /**
+     * Retorna o menor valor de `level` entre os cargos globais do usuário.
+     * Menor = mais poder. Retorna null se o usuário não tem cargos.
+     */
+    private function getUserMinRoleLevel(int $userId): ?int
+    {
+        $stmt = $this->db->prepare("
+            SELECT MIN(r.level) AS min_level
+            FROM tb_user_roles ur
+            JOIN tb_roles r ON ur.role_id = r.id
+            WHERE ur.user_id = :user_id
+        ");
+        $stmt->execute([':user_id' => $userId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return ($row && $row['min_level'] !== null) ? (int)$row['min_level'] : null;
+    }
+
+    /**
+     * Retorna o menor `level` entre os cargos globais do usuário logado.
+     * Menor = mais poder. Retorna null se o usuário não tem cargos.
+     *
+     * Uso: helpers para validações de delegação e checks no controller.
+     *
+     * @return int|null
+     */
+    public function getCurrentUserRoleLevel(): ?int
+    {
+        $userId = $this->getCurrentUserId();
+        if ($userId === null) {
+            return null;
+        }
+        return $this->getUserMinRoleLevel($userId);
+    }
+
+    /**
+     * Retorna o "highest role level" do usuário fornecido.
+     * Observação: nome histórico/significado no código: "highest" = cargo com mais autoridade,
+     * que no nosso modelo corresponde ao menor valor numérico de `level`.
+     *
+     * Ex: se o usuário tem cargos com level 1 e 3, retorna 1.
+     *
+     * @param int $userId
+     * @return int|null
+     */
+    public function getUserHighestRoleLevel(int $userId): ?int
+    {
+        return $this->getUserMinRoleLevel($userId);
     }
 }

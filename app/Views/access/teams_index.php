@@ -62,24 +62,27 @@
                                     </td>
                                     <td class="text-end pe-4" style="vertical-align: middle;">
                                         <div class="d-flex justify-content-end align-items-center gap-2">
+                                            <!-- OK: /admin/teams/ID/permissions -->
                                             <a href="/atlasware/public/admin/teams/<?= $team['id'] ?>/permissions"
                                             class="btn btn-outline-primary action-btn">
                                                 Permissões
                                             </a>
 
+                                            <!-- OK: /admin/teams/ID/members -->
                                             <a href="/atlasware/public/admin/teams/<?= $team['id'] ?>/members"
                                             class="btn btn-outline-info action-btn">
                                                 Membros
                                             </a>
 
-                                            <button type="button" 
-                                                    class="btn btn-outline-secondary action-btn"
-                                                    onclick="window.location.href='/atlasware/public/admin/teams/<?= $team['id'] ?>/edit'">
+                                            <!-- CORRIGIDO: Garantindo o padrão /admin/teams/ID/edit -->
+                                            <a href="/atlasware/public/admin/teams/<?= $team['id'] ?>/edit" 
+                                            class="btn btn-outline-secondary action-btn">
                                                 Editar
-                                            </button>
+                                            </a>
                                             
                                             <?php if ($this->auth->isMasterOrCoordinatorCurrent()): ?>
-                                                <form action="/atlasware/public/admin/teams/delete/<?= $team['id'] ?>" 
+                                                <!-- CORRIGIDO: De /admin/teams/delete/ID para /admin/teams/ID/delete -->
+                                                <form action="/atlasware/public/admin/teams/<?= $team['id'] ?>/delete" 
                                                     method="POST" 
                                                     class="m-0" 
                                                     onsubmit="return confirm('Tem certeza que deseja excluir este time?')">
