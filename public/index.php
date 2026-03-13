@@ -68,6 +68,16 @@ if ($path === '/logout') {
     exit;
 }
 
+if ($path === '/auth/reset-password') {
+    $controller = new AuthController();
+    if ($method === 'POST') {
+        $controller->handleResetPassword();
+    } else {
+        $controller->showResetPasswordForm();
+    }
+    exit;
+}
+
 // === DASHBOARD ===
 if ($path === '/dashboard' || $path === '/dashboard/') {
     if (!SessionManager::isLoggedIn()) {
