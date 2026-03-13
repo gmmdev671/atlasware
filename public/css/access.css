@@ -162,17 +162,8 @@
     padding:10px; background:var(--card-bg); border:1px solid #e2e8f0; border-radius:8px;
 }
 .permission-item input[type="checkbox"] { width:18px; height:18px; }
-
-/* Permissions grid in card (compact) */
-.permissions-grid-card {
-    display: flex;
-    flex-direction: column; /* Lista vertical é melhor para leitura em colunas estreitas */
-    gap: 5px;
- }
  
 .permission-item-card { font-size:.75rem; padding:6px 8px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; color:#166534; text-align:center; }
-@media (max-width:1200px) { .permissions-grid-card { grid-template-columns: repeat(4,1fr); } }
-@media (max-width:768px) { .permissions-grid-card { grid-template-columns: 1fr; } }
 
 /* ---------------------------
    Tabs compactas para detalhes

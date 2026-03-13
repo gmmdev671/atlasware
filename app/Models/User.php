@@ -560,4 +560,25 @@ class User {
             return false;
         }
     }
+
+    /**
+     * Busca líderes ativos que possuem pelo menos um subordinado ativo.
+     * Baseado na tabela legada 'usuarios' conforme estrutura do organograma.
+     */
+    public function getActiveLeaders(): array {
+        $sql = "
+            SELECT DISTINCT l.id, l.nome
+            FROM usuarios s
+            JOIN usuarios l ON l.id = s.id_lider
+            WHERE s.id_lider IS NOT NULL 
+            AND s.id_lider <> 0
+            AND l.status = 0 
+            AND s.status = 0
+            AND l.nome IS NOT NULL 
+            AND TRIM(l.nome) <> ''
+            ORDER BY l.nome ASC
+        ";
+        $stmt = $this->db->query($sql);
+        return $stmt->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+    }
 }

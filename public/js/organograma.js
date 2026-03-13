@@ -1,34 +1,29 @@
-// organograma.js - funções de interação do organograma (com permissão drag & drop)
+/* organograma.js - versão atualizada (Pan + Toolbar drag sem conflitos)
+   Colocar este arquivo em /public/js/organograma.js e incluir na view.
+*/
 
 /* =========================
    Helpers iniciais e toggles
    ========================= */
 
-// Toggle individual (recebe o elemento trigger — botão .expand-trigger)
 function toggleSub(el) {
     if (!el) return;
-
     var trigger = el.classList && el.classList.contains('expand-trigger') ? el : el.closest('.expand-trigger');
     if (!trigger) return;
-
     var li = trigger.closest('li');
     if (!li) return;
-
     var collapsed = li.classList.toggle('collapsed'); // true se agora está colapsado
-
     if (trigger.getAttribute) {
         if (trigger.getAttribute('aria-hidden') !== 'true') {
             trigger.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         }
     }
-
     var icon = trigger.querySelector('.toggle-icon');
     if (icon) {
         if (collapsed) icon.classList.add('rotated'); else icon.classList.remove('rotated');
     }
 }
 
-// Expande todos os nós que possuem subordinados
 function expandAll() {
     document.querySelectorAll('.organograma-humano-page .tree li.has-sub').forEach(function(li){
         li.classList.remove('collapsed');
@@ -39,7 +34,6 @@ function expandAll() {
     });
 }
 
-// Colapsa todos os nós que possuem subordinados
 function collapseAll() {
     document.querySelectorAll('.organograma-humano-page .tree li.has-sub').forEach(function(li){
         li.classList.add('collapsed');
@@ -49,18 +43,6 @@ function collapseAll() {
         if (icon) icon.classList.add('rotated');
     });
 }
-
-// Acessibilidade: ligar teclado (Enter / Space) aos triggers existentes
-document.addEventListener('keydown', function(e){
-    var target = e.target;
-    if (!target || !target.classList) return;
-    if (target.classList.contains('expand-trigger')) {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            toggleSub(target);
-        }
-    }
-});
 
 // Delegação de clique para triggers (se necessário)
 document.addEventListener('click', function(e){
@@ -114,7 +96,7 @@ function saveLeader() {
 }
 
 /* =========================
-   Modal Permissões (global)
+   Permissões modal (mantivemos as funções originais)
    ========================= */
 
 function openPermissionsModal(userId, userName) {
@@ -129,19 +111,16 @@ function openPermissionsModal(userId, userName) {
         .then(res => res.json())
         .then(data => {
             container.innerHTML = '';
-
             if (!data || !data.permissions) {
                 container.innerHTML = '<p class="text-muted">Nenhum dado de permissões.</p>';
                 return;
             }
-
             data.permissions.forEach(group => {
                 const groupEl = document.createElement('div');
                 groupEl.className = 'mb-4';
                 groupEl.innerHTML = `<h6 class="fw-bold">${group.group}</h6>`;
                 const list = document.createElement('div');
                 list.className = 'permissions-grid';
-
                 group.items.forEach(item => {
                     const itemEl = document.createElement('div');
                     itemEl.className = 'permission-item';
@@ -151,28 +130,9 @@ function openPermissionsModal(userId, userName) {
                     `;
                     list.appendChild(itemEl);
                 });
-
                 groupEl.appendChild(list);
                 container.appendChild(groupEl);
             });
-
-            if (data.scopes && data.scopes.length) {
-                const scopeGroup = document.createElement('div');
-                scopeGroup.className = 'mt-4 pt-3 border-top';
-                scopeGroup.innerHTML = `<h6 class="fw-bold">Escopo de Acesso</h6>`;
-                const scopeList = document.createElement('ul');
-                scopeList.className = 'list-group';
-
-                data.scopes.forEach(scope => {
-                    const li = document.createElement('li');
-                    li.className = 'list-group-item d-flex justify-content-between';
-                    li.innerHTML = `<strong>${scope.label}</strong> <span>${scope.value}</span>`;
-                    scopeList.appendChild(li);
-                });
-
-                scopeGroup.appendChild(scopeList);
-                container.appendChild(scopeGroup);
-            }
         })
         .catch(err => {
             console.error(err);
@@ -224,6 +184,17 @@ function toggleCardExpand(userId) {
         card.classList.add('expanded');
         expandedCards.add(userId);
         if (detailsContainer) detailsContainer.style.display = 'block';
+
+        // Reset tabs
+        const tabs = card.querySelectorAll('.nav-link');
+        const panes = card.querySelectorAll('.tab-pane');
+        tabs.forEach(t => t.classList.remove('active'));
+        panes.forEach(p => p.classList.remove('show', 'active'));
+        const defaultTab = card.querySelector(`a[href="#tab-abas-${userId}"]`);
+        const defaultPane = card.querySelector(`#tab-abas-${userId}`);
+        if (defaultTab) defaultTab.classList.add('active');
+        if (defaultPane) defaultPane.classList.add('show', 'active');
+
         loadCardDetails(userId);
     }
 }
@@ -232,22 +203,23 @@ function loadCardDetails(userId) {
     fetch(`${BASE_PATH}/admin/organograma/user-details?user_id=${userId}`)
         .then(res => res.json())
         .then(data => {
-            if (!data || data.error) {
-                console.error(data && data.error ? data.error : 'Dados inválidos');
+            if (!data || !data.success) {
+                console.error('Dados inválidos:', data);
                 return;
             }
-            fillTabResumo(userId, data.user);
-            fillTabObras(userId, data.obras);
-            fillTabCidades(userId, data.cidades);
-            fillTabAbas(userId, data.abas);
-            fillTabPermissoes(userId, data.permissoes);
+            fillTabObras(userId, data.obras || []);
+            fillTabCidades(userId, data.cidades || []);
+            fillTabAbas(userId, data.abas || []);
+            fillTabPermissoes(userId, data.permissoes || {});
         })
         .catch(err => console.error('Erro ao carregar detalhes:', err));
 }
 
-/* =========================
-   Preenchimento de abas (Resumo/Obras/Acessos/Abas)
-   ========================= */
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return text.toString().replace(/[&<>"']/g, m => map[m]);
+}
 
 function fillTabResumo(userId, user) {
     const content = document.querySelector(`.details-content[data-content="resumo"][data-user-id="${userId}"]`);
@@ -260,65 +232,6 @@ function fillTabResumo(userId, user) {
             <div class="detail-item"><strong>Status:</strong> ${user.status == 0 ? '<span class="badge bg-success">Ativo</span>' : '<span class="badge bg-danger">Inativo</span>'}</div>
         </div>
     `;
-}
-
-// helper debounce (adicione se não existir)
-function debounce(fn, wait) {
-    let t;
-    return function(...args) {
-        clearTimeout(t);
-        t = setTimeout(() => fn.apply(this, args), wait);
-    };
-}
-
-// envia atualização de obras para o servidor
-async function sendUpdateUserObras(userId, obraIds) {
-    try {
-        const resp = await fetch(BASE_PATH + '/admin/obras/updateUserObras', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: Number(userId), obraIds: obraIds })
-        });
-        const json = await resp.json();
-        return json;
-    } catch (err) {
-        console.error('Erro sendUpdateUserObras', err);
-        return { success: false, message: err.message || 'Erro de rede' };
-    }
-}
-
-// envia atualização de cidades para o servidor
-async function sendUpdateUserCidades(userId, cidadeIds) {
-    try {
-        const resp = await fetch(BASE_PATH + '/admin/cidades/updateUserCidades', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: Number(userId), cidadeIds: cidadeIds })
-        });
-        const json = await resp.json();
-        return json;
-    } catch (err) {
-        console.error('Erro sendUpdateUserCidades', err);
-        return { success: false, message: err.message || 'Erro de rede' };
-    }
-}
-
-// Helper para mostrar feedback de salvamento
-function showSavingFeedback(container, isSaving) {
-    let feedback = container.querySelector('.save-feedback');
-    if (!feedback) {
-        feedback = document.createElement('div');
-        feedback.className = 'save-feedback';
-        feedback.style = 'position: sticky; top: 0; right: 0; background: #fff3cd; padding: 2px 10px; border-radius: 4px; font-size: 11px; display: none; float: right; z-index: 10; border: 1px solid #ffeeba;';
-        container.prepend(feedback);
-    }
-    if (isSaving) {
-        feedback.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Salvando...';
-        feedback.style.display = 'block';
-    } else {
-        feedback.innerHTML = '<span class="text-success">✓ Salvo</span>';
-        setTimeout(() => { if (feedback) feedback.style.display = 'none'; }, 2000);
-    }
 }
 
 function fillTabObras(userId, obras) {
@@ -500,33 +413,6 @@ function fillTabCidades(userId, cidades) {
     renderList();
 }
 
-// Substitua pela nova versão de fillTabAbas (organograma.js)
-
-async function sendUpdateUserTabs(userId, activeTabIds) {
-    // Endpoint sugerido: /admin/organograma/update-user-tabs
-    // Ajuste conforme sua rota real.
-    try {
-        const resp = await fetch(`${BASE_PATH}/admin/organograma/update-user-tabs`, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: Number(userId), activeTabs: activeTabIds })
-        });
-        const text = await resp.text();
-        try {
-            return JSON.parse(text);
-        } catch (e) {
-            console.error('Resposta inválida do servidor (não JSON):', text);
-            return { success: false, message: 'Resposta inválida do servidor' };
-        }
-    } catch (err) {
-        console.error('Erro sendUpdateUserTabs', err);
-        return { success: false, message: err.message || 'Erro de rede' };
-    }
-}
-
-// debounce já existe no seu arquivo; se não existir, usar esta fallback:
-// const debounce = window.debounce || function(fn, wait){ let t; return function(...a){ clearTimeout(t); t = setTimeout(()=>fn.apply(this,a), wait); }; };
 function fillTabAbas(userId, abas) {
     const content = document.querySelector(`.details-content[data-content="abas"][data-user-id="${userId}"]`);
     if (!content) return;
@@ -680,17 +566,6 @@ function fillTabAbas(userId, abas) {
     } catch (err) { /* ignore */ }
 }
 
-/* =========================
-   Permissões (duas colunas + drag & drop)
-   ========================= */
-
-/**
- * Exibe as permissões em 2 colunas:
- * - col 1: permissões ativas (grid)
- * - col 2: permissões inativas (painel lateral)
- *
- * Espera que 'permissoes' tenha: { ativas: [...], inativas: [...], userName (opcional) }
- */
 function fillTabPermissoes(userId, permissoes) {
     const content = document.querySelector(`.details-content[data-content="permissoes"][data-user-id="${userId}"]`);
     if (!content) return;
@@ -763,322 +638,508 @@ function fillTabPermissoes(userId, permissoes) {
     attachPermDragHandlers(userId);
 }
 
-/* --------------------------
-   Drag & Drop helpers
-   -------------------------- */
+/* =========================
+   Pan (arrastar o canvas) + Fullscreen
+   ========================= */
 
-function attachPermDragHandlers(userId) {
-    const activeGrid = document.getElementById(`perms-active-grid-${userId}`);
-    const inactiveList = document.getElementById(`perms-inactive-list-${userId}`);
-    const inactivePanel = document.getElementById(`perms-inactive-panel-${userId}`);
+// Variáveis globais para manter a posição mesmo após o AJAX recarregar a árvore
+let currentTranslateX = 0;
+let currentTranslateY = 0;
 
-    const itemsSelector = `#perms-active-grid-${userId} .perm-draggable, #perms-inactive-list-${userId} .perm-draggable`;
-    document.querySelectorAll(itemsSelector).forEach(item => {
-        item.addEventListener('dragstart', onPermDragStart);
-        item.addEventListener('dragend', onPermDragEnd);
+function initPanAndFullscreen() {
+    const wrapper = document.querySelector('.tree-wrapper');
+    // Buscamos a tree toda vez que o evento ocorre para garantir que pegamos a nova (pós-AJAX)
+    if (!wrapper) return;
+
+    let isDown = false;
+    let startX = 0, startY = 0;
+    let originX = 0, originY = 0;
+    const speedMultiplier = 1.2; // Ajuste a sensibilidade aqui
+
+    function isInteractionTarget(el) {
+        if (!el) return false;
+        return !!el.closest(
+            'button, a, input, textarea, select, ' +
+            '.user-actions-wrapper, .card-details-container, ' +
+            '.custom-modal, .org-toolbar-fixed-bottom, .offcanvas'
+        );
+    }
+
+    // Função interna para aplicar o transform na árvore atual
+    function applyTransform() {
+        const tree = wrapper.querySelector('.tree');
+        if (tree) {
+            tree.style.transform = `translate(${currentTranslateX}px, ${currentTranslateY}px)`;
+        }
+    }
+
+    wrapper.addEventListener('pointerdown', (e) => {
+        // Se clicar em botões ou elementos de interação, não arrasta
+        if (isInteractionTarget(e.target)) return;
+        // Apenas botão esquerdo do mouse
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+        isDown = true;
+        wrapper.classList.add('panning');
+        
+        startX = e.clientX;
+        startY = e.clientY;
+        originX = currentTranslateX;
+        originY = currentTranslateY;
+
+        // Pointer Capture evita que o arraste "escape" se o mouse sair do wrapper
+        wrapper.setPointerCapture(e.pointerId);
+        e.preventDefault();
     });
 
-    if (activeGrid) {
-        activeGrid.addEventListener('dragover', onPermDragOver);
-        activeGrid.addEventListener('drop', function(e){ onPermDrop(e, userId, true); });
-        activeGrid.addEventListener('dragleave', onPermDragLeave);
-    }
-    if (inactiveList) {
-        inactiveList.addEventListener('dragover', onPermDragOver);
-        inactiveList.addEventListener('drop', function(e){ onPermDrop(e, userId, false); });
-        inactiveList.addEventListener('dragleave', onPermDragLeave);
-    }
-    if (inactivePanel) {
-        inactivePanel.addEventListener('dragover', onPermDragOver);
-        inactivePanel.addEventListener('drop', function(e){ onPermDrop(e, userId, false); });
-        inactivePanel.addEventListener('dragleave', onPermDragLeave);
-    }
-}
+    wrapper.addEventListener('pointermove', (e) => {
+        if (!isDown) return;
+        
+        currentTranslateX = originX + (e.clientX - startX) * speedMultiplier;
+        currentTranslateY = originY + (e.clientY - startY) * speedMultiplier;
+        
+        applyTransform();
+    });
 
-function onPermDragStart(e) {
-    const el = e.currentTarget;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', el.getAttribute('data-perm') || '');
-    el.classList.add('dragging');
-    e.dataTransfer.setData('from-active', el.getAttribute('data-active') === 'true' ? '1' : '0');
-}
+    wrapper.addEventListener('pointerup', (e) => {
+        isDown = false;
+        wrapper.classList.remove('panning');
+        wrapper.releasePointerCapture(e.pointerId);
+    });
 
-function onPermDragEnd(e) {
-    const el = e.currentTarget;
-    if (el) el.classList.remove('dragging');
-    document.querySelectorAll('.drop-target').forEach(d => d.classList.remove('drop-target'));
-}
+    wrapper.addEventListener('pointercancel', (e) => {
+        isDown = false;
+        wrapper.classList.remove('panning');
+        wrapper.releasePointerCapture(e.pointerId);
+    });
 
-function onPermDragOver(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const target = e.currentTarget;
-    if (target) target.classList.add('drop-target');
-}
-
-function onPermDragLeave(e) {
-    if (e.currentTarget) e.currentTarget.classList.remove('drop-target');
-}
-
-/* --------------------------
-   onPermDrop (async) - substituição
-   -------------------------- */
-
-async function onPermDrop(e, userId, toActive) {
-    e.preventDefault();
-    const dropTarget = e.currentTarget;
-    if (dropTarget) dropTarget.classList.remove('drop-target');
-
-    const permId = e.dataTransfer.getData('text/plain');
-    const fromActive = e.dataTransfer.getData('from-active') === '1';
-    if (!permId) return;
-
-    if (toActive && fromActive) return;
-    if (!toActive && !fromActive) return;
-
-    // chama o endpoint apropriado e aguarda o JSON
-    if (toActive) {
-        const res = await activatePermissionBatch(userId, [permId]);
-        if (res && res.success) {
-            moveDomToActive(userId, permId);
-        } else {
-            alert('Erro ao ativar permissão: ' + (res && res.message ? res.message : 'erro desconhecido'));
-        }
-    } else {
-        const res = await deactivatePermissionBatch(userId, [permId]);
-        if (res && res.success) {
-            moveDomToInactive(userId, permId);
-        } else {
-            alert('Erro ao desativar permissão: ' + (res && res.message ? res.message : 'erro desconhecido'));
-        }
-    }
-}
-
-/* --------------------------
-   DOM helpers para mover itens
-   -------------------------- */
-
-/* --------------------------
-   DOM helpers para mover itens (Adicionar ao final do arquivo)
-   -------------------------- */
-
-function moveDomToActive(userId, permId) {
-    const content = document.querySelector(`.details-content[data-content="permissoes"][data-user-id="${userId}"]`);
-    const item = document.querySelector(`#perms-inactive-list-${userId} .perm-draggable[data-perm="${cssEscape(permId)}"]`);
-    const activeGrid = document.getElementById(`perms-active-grid-${userId}`);
+    // Expõe a função globalmente para que o AJAX possa chamar após carregar
+    window.reapplyTreeTransform = applyTransform;
     
-    if (item && activeGrid) {
-        const clone = item.cloneNode(true);
-        clone.setAttribute('data-active', 'true');
-        clone.classList.remove('perm-inactive-item');
-        clone.classList.add('permission-item-card');
-        
-        // Reatacha os eventos de drag no novo elemento
-        clone.addEventListener('dragstart', onPermDragStart);
-        clone.addEventListener('dragend', onPermDragEnd);
-        
-        activeGrid.appendChild(clone);
-        item.remove();
-
-        // Atualiza os datasets para manter o modal de ativação sincronizado
-        try {
-            const inactiveArr = JSON.parse(content.dataset.inactivePermissions || '[]');
-            const activeArr = JSON.parse(content.dataset.activePermissions || '[]');
-            const idx = inactiveArr.findIndex(p => (p.campo || p.id || p.nome_exibicao || p) == permId);
-            let moved = idx !== -1 ? inactiveArr.splice(idx, 1)[0] : { campo: permId, nome_exibicao: permId };
-            activeArr.push(moved);
-            content.dataset.inactivePermissions = JSON.stringify(inactiveArr);
-            content.dataset.activePermissions = JSON.stringify(activeArr);
-        } catch (err) { console.warn('Erro ao atualizar dataset active', err); }
-    }
+    // Aplica a posição inicial
+    applyTransform();
 }
 
-function moveDomToInactive(userId, permId) {
-    const content = document.querySelector(`.details-content[data-content="permissoes"][data-user-id="${userId}"]`);
-    const item = document.querySelector(`#perms-active-grid-${userId} .perm-draggable[data-perm="${cssEscape(permId)}"]`);
-    const inactiveList = document.getElementById(`perms-inactive-list-${userId}`);
-    
-    if (item && inactiveList) {
-        const clone = item.cloneNode(true);
-        clone.setAttribute('data-active', 'false');
-        clone.classList.remove('permission-item-card');
-        clone.classList.add('perm-inactive-item');
-        
-        // Reatacha os eventos de drag no novo elemento
-        clone.addEventListener('dragstart', onPermDragStart);
-        clone.addEventListener('dragend', onPermDragEnd);
-        
-        inactiveList.appendChild(clone);
-        item.remove();
+// Inicialização
+document.addEventListener('DOMContentLoaded', initPanAndFullscreen);
 
-        // Atualiza os datasets para manter o modal de ativação sincronizado
-        try {
-            const inactiveArr = JSON.parse(content.dataset.inactivePermissions || '[]');
-            const activeArr = JSON.parse(content.dataset.activePermissions || '[]');
-            const idx = activeArr.findIndex(p => (p.campo || p.id || p.nome_exibicao || p) == permId);
-            let moved = idx !== -1 ? activeArr.splice(idx, 1)[0] : { campo: permId, nome_exibicao: permId };
-            inactiveArr.push(moved);
-            content.dataset.inactivePermissions = JSON.stringify(inactiveArr);
-            content.dataset.activePermissions = JSON.stringify(activeArr);
-        } catch (err) { console.warn('Erro ao atualizar dataset inactive', err); }
-    }
+/* =========================
+   Debounce helper + search
+   ========================= */
+
+function debounce(fn, wait) {
+    let t;
+    return function(...args) {
+        clearTimeout(t);
+        t = setTimeout(() => fn.apply(this, args), wait);
+    };
 }
 
-/* --------------------------
-   Chamadas servidor (batch) - substituições
-   -------------------------- */
+let searchTimeout;
+function handleSearch(query) {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        applyOrgFilters(query.toLowerCase());
+    }, 200);
+}
 
 /**
- * Ativa (define = 0) as permissões informadas para o usuário.
- * Chama AccessDetailsController::activatePermissions
- * Retorna o JSON do servidor: { success: true, updated: X } ou { success: false, message: '...' }
+ * Busca a árvore no servidor baseada no status selecionado
+ * Chamada pelo onchange do #adv-filter-status
  */
-async function activatePermissionBatch(userId, permissionsArray) {
-    try {
-        const res = await fetch(`${BASE_PATH}/admin/access-details/activatePermissions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: userId, permissions: permissionsArray })
+// Controller reutilizável para cancelar fetchs anteriores
+let currentTreeFetchController = null;
+
+function fetchTreeByStatus(status) {
+    // Cancela requisição anterior, se existir
+    if (currentTreeFetchController) {
+        try { currentTreeFetchController.abort(); } catch(e) {}
+    }
+    currentTreeFetchController = new AbortController();
+    const { signal } = currentTreeFetchController;
+
+    const treeContainer = document.querySelector('.tree');
+    if (treeContainer) treeContainer.style.opacity = '0.5';
+
+    const includeOrphans = document.getElementById('adv-filter-orphans')?.checked ? 1 : 0;
+    const url = `${BASE_PATH}/admin/organograma/fetch-tree?status=${encodeURIComponent(status)}&includeOrphans=${includeOrphans}`;
+
+    fetch(url, { signal })
+        .then(response => {
+            if (!response.ok) throw new Error('Erro ao buscar dados do servidor');
+            return response.text();
+        })
+        .then(html => {
+            // Verifica se o container ainda está no DOM (evita erros se a página mudou)
+            if (!treeContainer || !document.body.contains(treeContainer)) return;
+
+            // Insere o HTML novo
+            treeContainer.innerHTML = html;
+            treeContainer.style.opacity = '1';
+
+            // Se você usa pan/zoom ou plugins, reinicialize aqui (exemplo comentado)
+            // if (window.panzoomInstance) { window.panzoomInstance.dispose(); initPanzoom(); }
+
+            // Reaplica os filtros visuais (search/abas/perms). applyOrgFilters já está preparada.
+            try {
+                applyOrgFilters();
+            } catch (ex) {
+                console.error('Erro ao aplicar filtros após fetch:', ex);
+            }
+        })
+        .catch(error => {
+            // Se foi abort, não mostrar mensagem de erro
+            if (error.name === 'AbortError') {
+                // console.log('Fetch da árvore abortado');
+                return;
+            }
+            console.error('Erro:', error);
+            alert('Erro ao carregar árvore. Tente novamente.');
+            if (treeContainer) treeContainer.style.opacity = '1';
         });
-        // tenta parsear JSON (pode lançar se resposta não for JSON)
-        const json = await res.json();
-        return json;
+}
+
+/* =========================
+   Filtros Visuais Unificados
+   ========================= */
+
+
+function applyOrgFilters() {
+    try {
+        const searchTerm = (document.getElementById('org-search-input')?.value || '').toLowerCase().trim();
+        const rawLeader = document.getElementById('adv-filter-leader')?.value;
+        const selectedLeaderId = (rawLeader === undefined || rawLeader === null || rawLeader === '' || rawLeader === '0') ? '' : String(rawLeader);
+
+        // Substitua as linhas de selectedAbas e selectedPerms por estas:
+        const selectedAbas = Array.from(document.querySelectorAll('.adv-filter-aba:checked'))
+            .map(cb => parseInt(cb.value, 10))
+            .filter(n => !isNaN(n));
+
+        const selectedPerms = Array.from(document.querySelectorAll('.adv-filter-permissao:checked'))
+            .map(cb => String(cb.value).trim().toLowerCase())
+            .filter(s => s !== '');
+
+        const allItems = document.querySelectorAll('.tree li');
+        const allCards = document.querySelectorAll('.user-card');
+
+        console.log('applyOrgFilters start', {
+            searchTerm,
+            selectedLeaderId,
+            selectedAbas,
+            selectedPerms,
+            totalCards: allCards.length
+        });
+
+        // Sem filtros ativos: mostra tudo e sai
+        if (!searchTerm && !selectedLeaderId && selectedAbas.length === 0 && selectedPerms.length === 0) {
+            allItems.forEach(li => li.style.display = '');
+            return;
+        }
+
+        // Esconde tudo inicialmente
+        allItems.forEach(li => li.style.display = 'none');
+
+        // Percorre todos os cards (se nenhum card existir, nada acontece)
+        allCards.forEach(card => {
+            if (!card) return;
+
+            const cardName  = (card.querySelector('.user-full-name')?.textContent || '').toLowerCase().trim();
+            const cardLogin = (card.querySelector('.user-first-name')?.textContent || '').toLowerCase().trim();
+            const cardUserId  = (card.getAttribute('data-user-id') || '').toString();
+            const cardLiderId = (card.getAttribute('data-lider') || '').toString();
+
+            // Substitua as linhas de cardAbas e cardPerms por estas:
+            const cardAbas = (card.getAttribute('data-abas') || '')
+                .split(',')
+                .map(s => parseInt(s.trim(), 10))
+                .filter(n => !isNaN(n));
+
+            const cardPerms = (card.getAttribute('data-permissoes') || '')
+                .split(',')
+                .map(s => s.trim().toLowerCase())
+                .filter(s => s !== '');
+
+            let isMatch = true;
+
+            // 1) Filtro de texto (nome ou login)
+            if (searchTerm) {
+                if (!(cardName.includes(searchTerm) || cardLogin.includes(searchTerm))) {
+                    isMatch = false;
+                }
+            }
+
+            // 2) Filtro de líder (mantendo a sua lógica original: mostra o líder e seus subordinados imediatos)
+            if (isMatch && selectedLeaderId) {
+                const isTheLider = (cardUserId === selectedLeaderId);
+                const isSubordinate = (cardLiderId === selectedLeaderId);
+                if (!isTheLider && !isSubordinate) isMatch = false;
+            }
+
+            // 3) Filtro de Abas
+            if (isMatch && selectedAbas.length > 0) {
+                // Verifica se o card tem PELO MENOS UM dos IDs selecionados
+                const hasAba = selectedAbas.some(id => cardAbas.includes(id));
+                if (!hasAba) isMatch = false;
+            }
+
+            // 4) Filtro de Permissões
+            if (isMatch && selectedPerms.length > 0) {
+                const hasPerm = selectedPerms.some(p => cardPerms.includes(p));
+                if (!hasPerm) isMatch = false;
+            }
+
+            // Se passou por todos os filtros ativos, mostra o caminho até a raiz e (se for o líder selecionado) todos os subordinados
+            if (isMatch) {
+                showPathToRoot(card);
+
+                if (selectedLeaderId && cardUserId === selectedLeaderId) {
+                    // Mostra todas as linhas abaixo do líder selecionado
+                    showAllSubordinates(card);
+                }
+            }
+        });
     } catch (err) {
-        console.error('Erro activatePermissionBatch', err);
-        return { success: false, message: err.message || 'Erro de rede' };
+        // Falha segura — não quebra a página; log pra debugar
+        console.error('applyOrgFilters error:', err);
     }
 }
 
-/**
- * Desativa (define = 1) as permissões informadas para o usuário.
- * Chama AccessDetailsController::deactivatePermissions
- * Retorna o JSON do servidor: { success: true, updated: X } ou { success: false, message: '...' }
- */
-async function deactivatePermissionBatch(userId, permissions) {
-    try {
-        const response = await fetch(`${BASE_PATH}/admin/access-details/deactivatePermissions`, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId, permissions }),
-        });
+// Helper: mostra o nó do card e todos os ancestrais <li> até a raiz da .tree
+function showPathToRoot(card) {
+    const li = card.closest('li');
+    if (!li) return;
 
-        // parse uniforme (tratamento robusto)
-        const text = await response.text();
-        try {
-            const json = JSON.parse(text);
-            return json;
-        } catch (e) {
-            console.error('Resposta inválida do servidor (não JSON):', text);
-            return { success: false, message: 'Resposta inválida do servidor' };
+    let current = li;
+    while (current) {
+        current.style.display = ''; // mostra o <li> atual
+        // também garanta que o <ul> pai esteja visível (caso o CSS use display:none em uls)
+        const parentUL = current.parentElement;
+        if (parentUL && parentUL.tagName && parentUL.tagName.toLowerCase() === 'ul') {
+            parentUL.style.display = '';
         }
-    } catch (error) {
-        console.error('Erro deactivatePermissionBatch', error);
-        return { success: false, message: error.message || 'Erro de rede' };
+        // sobe para o <li> pai (se existir)
+        current = parentUL ? parentUL.closest('li') : null;
     }
 }
 
-/* --------------------------
-   Modal de ativação (mantive sua implementação)
-   -------------------------- */
+// Helper: mostra o nó do card e todos os <li> descendentes (subárvore)
+function showAllSubordinates(card) {
+    const li = card.closest('li');
+    if (!li) return;
+    // mostra o próprio li
+    li.style.display = '';
+    // mostra todos os li descendentes
+    li.querySelectorAll('li').forEach(subLi => subLi.style.display = '');
+}
 
-function openActivatePermissionsModal(userId, userName) {
-    const content = document.querySelector(`.details-content[data-content="permissoes"][data-user-id="${userId}"]`);
-    if (!content) return;
-
-    const inactivePerms = JSON.parse(content.dataset.inactivePermissions || '[]');
-    if (inactivePerms.length === 0) return;
-
-    document.getElementById('activatePermUserId').value = userId;
-    document.getElementById('activatePermUserName').textContent = userName;
-
-    const list = document.getElementById('inactivePermissionsList');
-    list.innerHTML = '';
-
-    inactivePerms.forEach(perm => {
-        const item = document.createElement('div');
-        item.className = 'permission-item';
-        item.innerHTML = `
-            <input type="checkbox" 
-                   id="perm-${perm.campo}" 
-                   value="${perm.campo}"
-                   class="perm-checkbox">
-            <label for="perm-${perm.campo}">${escapeHtml(perm.nome_exibicao || perm.campo)}</label>
-        `;
-        list.appendChild(item);
+function filterHierarchy(query) {
+    const allNodes = document.querySelectorAll('.user-node');
+    
+    // Para cada nó visível, garante que os pais também fiquem visíveis
+    allNodes.forEach(node => {
+        if (!node.classList.contains('filtered-out')) {
+            let cur = node;
+            while (cur && cur.classList && cur.classList.contains('user-node')) {
+                cur.classList.remove('filtered-out');
+                
+                // Expande o pai para mostrar o filho que deu match
+                const parentLi = cur.parentElement.closest('li.user-node');
+                if (parentLi) {
+                    parentLi.classList.remove('collapsed');
+                    const trigger = parentLi.querySelector('.expand-trigger');
+                    if (trigger) trigger.setAttribute('aria-expanded', 'true');
+                }
+                cur = parentLi;
+            }
+        }
     });
-
-    document.getElementById('modalActivatePermissions').style.display = 'flex';
 }
 
-function closeActivatePermissionsModal() {
-    document.getElementById('modalActivatePermissions').style.display = 'none';
+function clearOrgSearch() {
+    const input = document.getElementById('org-search-input');
+    if (input) input.value = '';
+    const sel = document.getElementById('filter-status');
+    if (sel) sel.value = 'all';
+    applyOrgFilters('');
 }
 
-/* --------------------------
-   Atualiza activateSelectedPermissions para usar o JSON retornado
-   -------------------------- */
+/* =========================
+   Inicialização Robusta
+   ========================= */
 
-async function activateSelectedPermissions() {
-    const userId = document.getElementById('activatePermUserId').value;
-    const checkboxes = document.querySelectorAll('.perm-checkbox:checked');
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    initPanAndFullscreen();
+} else {
+    document.addEventListener('DOMContentLoaded', initPanAndFullscreen);
+}
 
-    if (checkboxes.length === 0) {
-        alert('Selecione ao menos uma permissão para ativar');
+function toggleFilterPanel() {
+    const el = document.getElementById('offcanvasFilters');
+    if (!el) return;
+
+    // Tenta pegar a instância existente
+    let instance = bootstrap.Offcanvas.getInstance(el);
+    
+    // Se não existir, cria uma nova
+    if (!instance) {
+        instance = new bootstrap.Offcanvas(el);
+    }
+
+    // Verifica se está visível no momento para decidir se esconde ou mostra
+    if (el.classList.contains('show')) {
+        instance.hide();
+    } else {
+        instance.show();
+    }
+}
+
+// Função para limpar todos os filtros avançados
+function resetAdvFilters() {
+    const form = document.getElementById('form-filters-adv');
+    if (form) form.reset();
+    
+    const searchInput = document.getElementById('org-search-input');
+    if (searchInput) searchInput.value = '';
+
+    // 1. Limpa os filtros visuais do DOM imediatamente
+    applyOrgFilters();
+
+    // 2. O reset do status volta para 'active' e recarrega a árvore original do servidor
+    fetchTreeByStatus('active');
+}
+
+function recenterTree() {
+    const tree = document.querySelector('.tree');
+    if (!tree) return;
+
+    // Resetamos as variáveis globais de controle do Pan (se você as tiver no escopo global)
+    // Caso contrário, apenas resetamos o estilo:
+    tree.style.transition = "transform 0.4s ease-out"; // Suaviza o movimento
+    tree.style.transform = `translate(0px, 0px) scale(1)`;
+    
+    // Remove a transição após o movimento para não atrasar o Pan manual depois
+    setTimeout(() => {
+        tree.style.transition = "none";
+    }, 400);
+
+    // Se você usa variáveis startX/startY globais para o Pan, resete-as aqui também
+    translateX = 0;
+    translateY = 0;
+}
+
+// Reusa o mesmo controller global para cancelar chamadas anteriores
+// (declared previously: let currentTreeFetchController = null;)
+async function fetchTreeFromLeader(leaderId) {
+    // Cancela requisição anterior, se existir
+    if (currentTreeFetchController) {
+        try { currentTreeFetchController.abort(); } catch(e) {}
+    }
+    currentTreeFetchController = new AbortController();
+    const { signal } = currentTreeFetchController;
+
+    const tree = document.querySelector('.tree');
+    if (!tree) return;
+
+    // Mostra feedback visual
+    tree.style.opacity = '0.5';
+
+    const status = document.getElementById('adv-filter-status')?.value || 'active';
+
+    // Se limpar o líder, volta para a árvore por status (reaplica o mesmo fluxo de cancelamento)
+    if (!leaderId) {
+        try {
+            // Cancela o controller atual antes de delegar (evita dup)
+            try { currentTreeFetchController.abort(); } catch(e) {}
+            currentTreeFetchController = null;
+            fetchTreeByStatus(status);
+        } finally {
+            // Garante que o estado visual será restaurado pela fetchTreeByStatus
+        }
         return;
     }
 
-    const permissions = Array.from(checkboxes).map(cb => cb.value);
+    const includeOrphans = document.getElementById('adv-filter-orphans')?.checked ? 1 : 0;
+    const url = `${BASE_PATH}/admin/organograma/fetch-leader-tree?leaderId=${encodeURIComponent(leaderId)}&status=${encodeURIComponent(status)}&includeOrphans=${includeOrphans}`;
 
     try {
-        const res = await activatePermissionBatch(userId, permissions);
-        if (res && res.success) {
-            alert('Permissões ativadas com sucesso!');
-            closeActivatePermissionsModal();
-            loadCardDetails(userId); // recarrega para garantir consistência visual + dados
-        } else {
-            alert('Erro ao ativar permissões: ' + (res && res.message ? res.message : 'erro desconhecido'));
+        const resp = await fetch(url, { method: 'GET', signal });
+
+        if (!resp.ok) {
+            throw new Error(`Erro ao buscar árvore do líder (${resp.status})`);
+        }
+
+        const html = await resp.text();
+
+        // Verifica se o container ainda está no DOM
+        if (!document.body.contains(tree)) return;
+
+        tree.innerHTML = html;
+        tree.style.opacity = '1';
+
+        // Reinicialize plugins se necessário (pan/zoom, tooltips, etc.)
+        // ex: if (window.panzoomInstance) { window.panzoomInstance.dispose(); initPanzoom(); }
+
+        // Reaplica filtros visuais (search/abas/perms)
+        try {
+            applyOrgFilters();
+        } catch (ex) {
+            console.error('Erro ao aplicar filtros após fetch do líder:', ex);
         }
     } catch (error) {
-        console.error(error);
-        alert('Erro ao ativar permissões');
+        if (error.name === 'AbortError') {
+            // fetch abortado — silencioso
+            return;
+        }
+        console.error('fetchTreeFromLeader erro:', error);
+        alert('Erro ao carregar árvore do líder. Tente novamente.');
+        tree.style.opacity = '1';
+    } finally {
+        // limpa controller atual (se ainda for o mesmo)
+        if (currentTreeFetchController && currentTreeFetchController.signal === signal) {
+            currentTreeFetchController = null;
+        }
     }
 }
 
-/* --------------------------
-   Utilitários
-   -------------------------- */
+// No final do seu organograma.js, adicione/substitua:
+if (typeof jQuery === 'undefined') {
+    console.error('jQuery não carregado. Certifique-se de incluir jQuery antes de organograma.js');
+} else {
+    jQuery(function($){
+        $(document).ready(function() {
+            // 1. Quando mudar o Líder no Offcanvas -> Busca nova árvore
+            $('#adv-filter-leader').on('change', function() {
+                const leaderId = $(this).val();
+                if (leaderId) {
+                    fetchTreeFromLeader(leaderId);
+                } else {
+                    // Se limpar o líder, volta para a árvore padrão (status ativo)
+                    fetchTreeByStatus('active');
+                }
+            });
 
-function escapeHtml(text) {
-    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-    return String(text || '').replace(/[&<>"']/g, m => map[m]);
+            // 2. Quando mudar o Status no Offcanvas -> Busca nova árvore
+            $('#adv-filter-status').on('change', function() {
+                const status = $(this).val();
+                fetchTreeByStatus(status);
+            });
+
+            // 3. Quando mudar o Switch de Órfãos -> Busca nova árvore
+            $('#adv-filter-orphans').on('change', function() {
+                const status = $('#adv-filter-status').val() || 'active';
+                fetchTreeByStatus(status);
+            });
+
+            // 4. A pesquisa por texto continua sendo apenas visual (DOM)
+            $('#org-search-input').on('keyup', function() {
+                handleSearch($(this).val());
+            });
+        });
+    });
+
+    document.addEventListener('change', function(e) {
+        if (e.target.classList.contains('adv-filter-aba') || e.target.classList.contains('adv-filter-permissao')) {
+            applyOrgFilters();
+        }
+    });
 }
-
-/* Escapa caracteres para uso em selectors (simples) */
-function cssEscape(str) {
-    return String(str).replace(/([ #.;?+*~>:[\](){}\\'\"`])/g, "\\$1");
-}
-
-/* Toggle inline do nome (primeiro <-> completo) */
-function toggleName(btn) {
-    var wrapper = btn.closest('.user-name-toggle');
-    if (!wrapper) return;
-    var isVisible = wrapper.classList.contains('full-visible');
-    if (isVisible) {
-        wrapper.classList.remove('full-visible');
-    } else {
-        wrapper.classList.add('full-visible');
-    }
-}
-
-/* Opcional: permitir clique no first-name para alternar (delegação) */
-document.addEventListener('click', function(e){
-    var el = e.target;
-    var first = el.closest && el.closest('.user-first-name');
-    if (first) {
-        // evita disparar expandir card (por propagation)
-        e.stopPropagation();
-        var wrapper = first.closest('.user-name-toggle');
-        if (wrapper) wrapper.classList.toggle('full-visible');
-    }
-});
